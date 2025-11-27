@@ -3,6 +3,15 @@ export type DocumentType = 'contract' | 'invoice' | 'act' | 'order' | 'email' | 
 export type DocumentStatus = 'processed' | 'processing' | 'review' | 'error';
 export type PriorityLevel = 'high' | 'medium' | 'low';
 
+export interface DocumentHistory {
+  id: string;
+  date: string;
+  user: string;
+  action: string;
+  type: 'info' | 'success' | 'warning' | 'danger';
+  details?: string;
+}
+
 export interface Document {
   id: string;
   title: string;
@@ -17,6 +26,8 @@ export interface Document {
   uploadedBy: string;
   path: string;
   version: number;
+  description?: string;
+  history: DocumentHistory[];
   isFavorite?: boolean;
   isArchived?: boolean;
   isDeleted?: boolean;

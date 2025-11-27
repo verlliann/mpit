@@ -18,7 +18,13 @@ export const MOCK_DOCUMENTS: Document[] = [
     path: 's3://bucket/contracts/2025/01/doc-1.pdf',
     version: 3,
     isFavorite: true,
-    tags: ['Важное', '2025']
+    tags: ['Важное', '2025'],
+    description: 'Основной рамочный договор поставки на 2025 год. Согласован с финансовым директором.',
+    history: [
+      { id: 'h1', date: '2025-01-15T10:00:00', user: 'Иванов А.А.', action: 'Загружен документ', type: 'info' },
+      { id: 'h2', date: '2025-01-15T10:05:00', user: 'Система', action: 'Автоматическое распознавание', type: 'info' },
+      { id: 'h3', date: '2025-01-15T14:30:00', user: 'Петрова С.В.', action: 'Документ согласован', type: 'success' },
+    ]
   },
   {
     id: 'doc-2',
@@ -34,7 +40,12 @@ export const MOCK_DOCUMENTS: Document[] = [
     uploadedBy: 'Петрова С.В.',
     path: 's3://bucket/invoices/2025/01/doc-2.pdf',
     version: 1,
-    tags: ['Срочно', 'На оплату']
+    tags: ['Срочно', 'На оплату'],
+    description: 'Оплата клининговых услуг за декабрь.',
+    history: [
+      { id: 'h4', date: '2025-01-14T09:15:00', user: 'Петрова С.В.', action: 'Загружен документ', type: 'info' },
+      { id: 'h5', date: '2025-01-14T09:16:00', user: 'Система', action: 'Отправлен на распознавание', type: 'info' },
+    ]
   },
   {
     id: 'doc-3',
@@ -51,7 +62,12 @@ export const MOCK_DOCUMENTS: Document[] = [
     path: 's3://bucket/acts/2025/01/doc-3.pdf',
     version: 1,
     isArchived: true,
-    tags: ['Q1']
+    tags: ['Q1'],
+    description: 'Акт сверки за 1 квартал.',
+    history: [
+      { id: 'h6', date: '2025-01-10T16:00:00', user: 'Сидоров К.К.', action: 'Загружен документ', type: 'info' },
+      { id: 'h7', date: '2025-01-11T10:00:00', user: 'Система', action: 'Обнаружено расхождение сумм', type: 'warning' },
+    ]
   },
   {
     id: 'doc-4',
@@ -67,7 +83,11 @@ export const MOCK_DOCUMENTS: Document[] = [
     uploadedBy: 'Система',
     path: 's3://bucket/scans/2024/12/scan-99.jpg',
     version: 1,
-    isDeleted: true
+    isDeleted: true,
+    history: [
+      { id: 'h8', date: '2024-12-28T12:00:00', user: 'Сканер #4', action: 'Автоматическая загрузка', type: 'info' },
+      { id: 'h9', date: '2024-12-28T12:05:00', user: 'Система', action: 'Ошибка распознавания текста', type: 'danger' },
+    ]
   },
   {
     id: 'doc-5',
@@ -84,7 +104,12 @@ export const MOCK_DOCUMENTS: Document[] = [
     path: 's3://bucket/email/2025/01/msg-1.msg',
     version: 1,
     isFavorite: true,
-    tags: ['Налоги']
+    tags: ['Налоги'],
+    description: 'Требование о предоставлении документов.',
+    history: [
+      { id: 'h10', date: '2025-01-16T08:30:00', user: 'Email Bot', action: 'Импорт из почты', type: 'info' },
+      { id: 'h11', date: '2025-01-16T08:35:00', user: 'Иванов А.А.', action: 'Установлен высокий приоритет', type: 'warning' },
+    ]
   },
   {
     id: 'doc-6',
@@ -100,7 +125,10 @@ export const MOCK_DOCUMENTS: Document[] = [
     uploadedBy: 'HR Отдел',
     path: 's3://bucket/orders/2025/01/ord-1.pdf',
     version: 1,
-    tags: ['HR']
+    tags: ['HR'],
+    history: [
+      { id: 'h12', date: '2025-01-09T11:00:00', user: 'Смирнова Е.Е.', action: 'Создан документ', type: 'info' },
+    ]
   },
   {
     id: 'doc-7',
@@ -116,7 +144,11 @@ export const MOCK_DOCUMENTS: Document[] = [
     uploadedBy: 'Иванов А.А.',
     path: 's3://bucket/trash/draft.docx',
     version: 1,
-    isDeleted: true
+    isDeleted: true,
+    history: [
+       { id: 'h13', date: '2024-11-01T10:00:00', user: 'Иванов А.А.', action: 'Загружен', type: 'info' },
+       { id: 'h14', date: '2024-11-02T10:00:00', user: 'Иванов А.А.', action: 'Удален в корзину', type: 'danger' },
+    ]
   },
   {
     id: 'doc-8',
@@ -132,7 +164,8 @@ export const MOCK_DOCUMENTS: Document[] = [
     uploadedBy: 'Admin',
     path: 's3://bucket/archive/2023.zip',
     version: 1,
-    isArchived: true
+    isArchived: true,
+    history: []
   }
 ];
 
