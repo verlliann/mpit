@@ -1,6 +1,7 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, Loader2 } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { MOCK_DOCUMENTS } from '../constants';
 
 interface Message {
@@ -86,7 +87,7 @@ RULES:
             }))
           });
 
-          const result = await chat.sendMessageStream(userMessage.text);
+          const result = await chat.sendMessageStream({ message: userMessage.text });
           
           let fullResponse = "";
           const modelMessageId = (Date.now() + 1).toString();
@@ -100,7 +101,8 @@ RULES:
           }]);
 
           for await (const chunk of result) {
-            const text = chunk.text;
+            const c = chunk as GenerateContentResponse;
+            const text = c.text;
             if (text) {
                 fullResponse += text;
                 setMessages(prev => prev.map(msg => 
