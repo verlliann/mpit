@@ -15,20 +15,15 @@ import { CommandPalette } from './components/CommandPalette';
 import { Analytics } from './components/Analytics';
 import { ViewState, Document, Counterparty } from './types';
 import { CheckCircle, AlertTriangle, X } from 'lucide-react';
-
-interface Notification {
-  id: string;
-  type: 'success' | 'warning' | 'error';
-  title: string;
-  message: string;
-}
+import { useAuth, useNotifications } from './hooks';
 
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { isAuthenticated, login, logout, user } = useAuth();
+  const { notifications, success, error: notifyError, removeNotification } = useNotifications();
+  
   const [activeView, setActiveView] = useState<ViewState>('dashboard');
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [selectedCounterparty, setSelectedCounterparty] = useState<Counterparty | null>(null);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
   // Command Palette Handler
@@ -43,28 +38,30 @@ export default function App() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const handleLogin = () => {
-    setIsAuthenticated(true);
+  const handleLogin = async (email: string, password: string) => {
+    try {
+      await login({ email, password });
+      success('Добро пожаловать!', 'Вы успешно вошли в систему');
+    } catch (err: any) {
+      notifyError('Ошибка входа', err.message || 'Не удалось войти в систему');
+      throw err;
+    }
   };
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    setActiveView('dashboard');
-    setSelectedDocument(null);
-    setSelectedCounterparty(null);
-  };
-
-  const addNotification = (type: 'success' | 'warning' | 'error', title: string, message: string) => {
-    const id = Date.now().toString();
-    setNotifications(prev => [...prev, { id, type, title, message }]);
-    setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== id));
-    }, 4000);
+  const handleLogout = async () => {
+    try {
+      await logout();
+      setActiveView('dashboard');
+      setSelectedDocument(null);
+      setSelectedCounterparty(null);
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
   };
 
   const handleDocumentUpdate = (updatedDoc: Document) => {
     setSelectedDocument(updatedDoc);
-    addNotification('success', 'Документ обновлен', `Изменения в "${updatedDoc.title}" успешно сохранены.`);
+    success('Документ обновлен', `Изменения в "${updatedDoc.title}" успешно сохранены.`);
   };
 
   const renderContent = () => {
@@ -160,14 +157,14 @@ export default function App() {
       <div className="absolute top-20 right-6 z-50 space-y-3 pointer-events-none">
         {notifications.map(n => (
           <div key={n.id} className="bg-white/90 backdrop-blur-md rounded-xl shadow-xl border border-slate-200/60 p-4 w-80 pointer-events-auto animate-in slide-in-from-right fade-in duration-300 flex items-start gap-3">
-             <div className={`mt-0.5 ${n.type === 'success' ? 'text-success' : n.type === 'warning' ? 'text-warning' : 'text-danger'}`}>
-               {n.type === 'success' ? <CheckCircle size={18} /> : <AlertTriangle size={18} />}
+             <div className={`mt-0.5 ${n.type === 'success' ? 'text-success' : n.type === 'warning' ? 'text-warning' : n.type === 'error' ? 'text-danger' : 'text-blue-500'}`}>
+               {(n.type === 'success' || n.type === 'info') ? <CheckCircle size={18} /> : <AlertTriangle size={18} />}
              </div>
              <div className="flex-1">
                <h4 className="text-sm font-semibold text-slate-800">{n.title}</h4>
                <p className="text-xs text-slate-500 mt-1">{n.message}</p>
              </div>
-             <button onClick={() => setNotifications(prev => prev.filter(x => x.id !== n.id))} className="text-slate-400 hover:text-slate-600">
+             <button onClick={() => removeNotification(n.id)} className="text-slate-400 hover:text-slate-600">
                <X size={14} />
              </button>
           </div>

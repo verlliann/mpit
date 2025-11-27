@@ -2,22 +2,27 @@ import React, { useState } from 'react';
 import { ArrowRight, Lock, Mail, ShieldCheck } from 'lucide-react';
 
 interface AuthScreenProps {
-  onLogin: () => void;
+  onLogin: (email: string, password: string) => Promise<void>;
 }
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState('demo@sirius-dms.com');
   const [password, setPassword] = useState('password');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
+    setError(null);
+    
+    try {
+      await onLogin(email, password);
+    } catch (err: any) {
+      setError(err.message || 'Не удалось войти в систему');
+    } finally {
       setIsLoading(false);
-      onLogin();
-    }, 1000);
+    }
   };
 
   return (
@@ -68,6 +73,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                 />
               </div>
             </div>
+
+            {error && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+                {error}
+              </div>
+            )}
 
             <button 
               type="submit" 

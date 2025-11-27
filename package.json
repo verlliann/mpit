@@ -1,11 +1,13 @@
 {
   "name": "sirius-dms",
   "version": "1.0.0",
+  "description": "Sirius Document Management System - Frontend",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@google/genai": "*",

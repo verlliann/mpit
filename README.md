@@ -1,20 +1,77 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Sirius DMS
 
-# Run and deploy your AI Studio app
+**Система управления документами** с интеграцией FastAPI и AI ассистентом.
 
-This contains everything you need to run your app locally.
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![React](https://img.shields.io/badge/React-18.3-blue)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue)
 
-View your app in AI Studio: https://ai.studio/apps/drive/1gK0Y5x3uWdxOTySftn4kA51Yney2ROrc
+---
 
-## Run Locally
+## 🚀 Быстрый старт
 
-**Prerequisites:**  Node.js
+### Установка и запуск:
+```bash
+# Установка зависимостей
+npm install
 
+# Запуск dev-сервера
+npm run dev
+```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Приложение откроется на: **http://localhost:5173**
+
+**Тестовый вход**: `demo@sirius-dms.com` / `password`
+
+---
+
+## 📚 Документация
+
+Вся документация находится в папке **`doc/`**:
+
+| Файл | Описание |
+|------|----------|
+| [README.md](./doc/README.md) | 📖 Общая документация проекта |
+| [API.md](./doc/API.md) | 🔌 API эндпоинты и интеграция |
+| [ENDPOINTS_STATUS.md](./doc/ENDPOINTS_STATUS.md) | 📊 Отчет о статусе эндпоинтов |
+| [BACKEND_INTEGRATION.md](./doc/BACKEND_INTEGRATION.md) | 🔌 Руководство по интеграции бэкенда |
+
+---
+
+## ⚙️ Технологии
+
+- **React 18** + TypeScript
+- **Vite** (сборщик)
+- **Tailwind CSS** (стили)
+- **FastAPI** (бэкенд, готов к интеграции)
+- **Gemini AI** (AI ассистент)
+
+---
+
+## 📦 Структура проекта
+
+```
+mpit/
+├── api/           # API сервисы (7 модулей)
+├── components/    # React компоненты (15 штук)
+├── hooks/         # Custom хуки
+├── utils/         # Утилиты
+├── doc/           # 📚 Документация
+└── ...
+```
+
+---
+
+## 📋 Доступные команды
+
+```bash
+npm run dev          # Запуск dev-сервера
+npm run build        # Production сборка
+npm run preview      # Просмотр production сборки
+npm run type-check   # Проверка TypeScript типов
+```
+
+---
+
+**License**: MIT  
+**Version**: 1.0.0
