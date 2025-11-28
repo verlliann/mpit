@@ -2,6 +2,23 @@
 import { Document, Counterparty } from './types';
 import { FileText, Receipt, ScrollText, Mail, Image, Files } from 'lucide-react';
 
+export const GLASS_STYLES = {
+  // Level 1: Sidebar, Dashboard containers - Base layer
+  panel: "bg-white/40 backdrop-blur-xl border border-white/40 shadow-sm",
+  
+  // Level 2: Cards, Active elements - Middle layer
+  card: "bg-white/60 backdrop-blur-md border border-white/60 shadow-lg",
+  
+  // Level 3: Modals, Slide-overs - Top layer
+  modal: "bg-white/80 backdrop-blur-2xl border border-white/50 shadow-2xl",
+  
+  // Interactive elements
+  interactive: "hover:bg-white/50 transition-all duration-200 active:scale-95",
+  
+  // Inputs
+  input: "bg-white/50 border-white/40 focus:bg-white/70 focus:border-indigo-300 backdrop-blur-sm placeholder:text-slate-400",
+};
+
 export const MOCK_DOCUMENTS: Document[] = [
   {
     id: 'doc-1',

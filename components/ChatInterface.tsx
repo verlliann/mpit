@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, Loader2 } from 'lucide-react';
 import { chatService } from '../api/services/chat';
+import { GLASS_STYLES } from '../constants';
 
 interface Message {
   id: string;
@@ -84,7 +85,7 @@ export const ChatInterface: React.FC = () => {
         return [...prev, {
         id: Date.now().toString(),
         role: 'model',
-          text: error.message || "Извините, произошла ошибка при обработке вашего запроса.",
+        text: error.message || "Извините, произошла ошибка при обработке вашего запроса.",
         timestamp: new Date()
         }];
       });
@@ -101,17 +102,17 @@ export const ChatInterface: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-white relative">
+    <div className="flex flex-col h-full bg-transparent relative">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-white z-10">
-         <div className="flex items-center gap-3">
-           <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg text-white shadow-sm">
-             <Sparkles size={20} />
+      <div className={`mx-6 mt-4 mb-2 px-6 py-4 flex items-center justify-between z-10 rounded-2xl ${GLASS_STYLES.panel}`}>
+         <div className="flex items-center gap-4">
+           <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl text-white shadow-lg shadow-indigo-500/30">
+             <Sparkles size={24} />
            </div>
            <div>
              <h2 className="text-lg font-bold text-slate-800">AI Ассистент</h2>
-             <p className="text-xs text-slate-500 flex items-center gap-1">
-               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+             <p className="text-xs text-slate-500 flex items-center gap-1.5 font-medium">
+               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]"></span>
                Система онлайн
              </p>
            </div>
@@ -119,43 +120,43 @@ export const ChatInterface: React.FC = () => {
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
+      <div className="flex-1 overflow-y-auto p-6 space-y-8">
         {messages.map((msg) => {
           const isUser = msg.role === 'user';
           return (
-            <div key={msg.id} className={`flex gap-4 ${isUser ? 'justify-end' : 'justify-start'}`}>
+            <div key={msg.id} className={`flex gap-4 ${isUser ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
               {!isUser && (
-                <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-indigo-600 shadow-sm flex-shrink-0 mt-1">
-                  <Bot size={16} />
+                <div className="w-10 h-10 rounded-full bg-white/80 border border-white/50 flex items-center justify-center text-indigo-600 shadow-sm flex-shrink-0 mt-1 backdrop-blur-sm">
+                  <Bot size={20} />
                 </div>
               )}
               
               <div 
-                className={`max-w-[80%] px-5 py-3.5 rounded-2xl text-sm leading-relaxed shadow-sm whitespace-pre-wrap ${
+                className={`max-w-[75%] px-6 py-4 rounded-2xl text-sm leading-relaxed shadow-md whitespace-pre-wrap backdrop-blur-md ${
                   isUser 
-                    ? 'bg-primary text-white rounded-tr-none' 
-                    : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none'
+                    ? 'bg-gradient-to-br from-blue-600 to-purple-600 text-white rounded-tr-sm shadow-indigo-500/20' 
+                    : 'bg-white/60 border border-white/50 text-slate-700 rounded-tl-sm'
                 }`}
               >
                 {msg.text}
               </div>
 
               {isUser && (
-                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-primary flex-shrink-0 mt-1">
-                  <User size={16} />
+                <div className="w-10 h-10 rounded-full bg-blue-100/80 border border-blue-200 flex items-center justify-center text-blue-600 flex-shrink-0 mt-1 backdrop-blur-sm">
+                  <User size={20} />
                 </div>
               )}
             </div>
           );
         })}
         {isLoading && (
-          <div className="flex gap-4 justify-start">
-            <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-indigo-600 shadow-sm flex-shrink-0 mt-1">
-               <Bot size={16} />
+          <div className="flex gap-4 justify-start animate-pulse">
+            <div className="w-10 h-10 rounded-full bg-white/80 border border-white/50 flex items-center justify-center text-indigo-600 shadow-sm flex-shrink-0 mt-1 backdrop-blur-sm">
+               <Bot size={20} />
             </div>
-            <div className="bg-white border border-slate-200 px-4 py-3 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-2">
-               <Loader2 size={16} className="animate-spin text-slate-400" />
-               <span className="text-xs text-slate-500">Анализирую документы...</span>
+            <div className="bg-white/60 border border-white/50 px-5 py-4 rounded-2xl rounded-tl-sm shadow-sm flex items-center gap-3 backdrop-blur-md">
+               <Loader2 size={18} className="animate-spin text-indigo-500" />
+               <span className="text-sm text-slate-600 font-medium">Анализирую документы...</span>
             </div>
           </div>
         )}
@@ -163,25 +164,26 @@ export const ChatInterface: React.FC = () => {
       </div>
 
       {/* Input Area */}
-      <div className="p-4 bg-white border-t border-slate-200">
-        <div className="max-w-4xl mx-auto relative">
+      <div className="p-6 pb-8">
+        <div className="max-w-4xl mx-auto relative group">
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full blur opacity-20 group-hover:opacity-30 transition-opacity duration-500"></div>
           <textarea
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Спросите о документах, например: 'Найди все срочные счета от ИП Иванов'..."
-            className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl pl-4 pr-12 py-3.5 focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white transition-all resize-none h-[52px] max-h-32 text-sm"
+            className={`w-full pl-6 pr-14 py-4 rounded-full focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all resize-none h-[60px] max-h-32 text-sm shadow-xl ${GLASS_STYLES.input}`}
           />
           <button 
             onClick={handleSendMessage}
             disabled={!inputValue.trim() || isLoading}
-            className="absolute right-2 top-2 p-2 bg-primary text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:hover:bg-primary transition-colors"
+            className="absolute right-2 top-2 p-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-full hover:shadow-lg hover:shadow-indigo-500/40 disabled:opacity-50 disabled:shadow-none transition-all active:scale-95"
           >
-            <Send size={16} />
+            <Send size={18} className="ml-0.5" />
           </button>
         </div>
-        <div className="text-center mt-2">
-           <p className="text-[10px] text-slate-400">
+        <div className="text-center mt-3">
+           <p className="text-[10px] text-slate-500 font-medium opacity-70">
              AI может ошибаться. Пожалуйста, проверяйте важную информацию в документах.
            </p>
         </div>

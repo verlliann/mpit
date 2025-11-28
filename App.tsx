@@ -103,14 +103,14 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-bgMain text-slate-900 font-sans">
+    <div className="flex flex-col h-screen text-slate-900 font-sans bg-transparent">
       <Topbar 
         onNavigate={setActiveView} 
         onLogout={handleLogout}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
       />
       
-      <div className="flex flex-1 overflow-hidden relative">
+      <div className="flex flex-1 overflow-hidden relative p-4 gap-4">
         <Sidebar activeView={activeView} onChangeView={(view) => {
           setActiveView(view);
           if (view !== 'library' && view !== 'favorites' && view !== 'archive' && view !== 'trash') {
@@ -121,7 +121,7 @@ export default function App() {
           }
         }} />
         
-        <main className="flex-1 overflow-y-auto relative bg-bgMain scroll-smooth">
+        <main className="flex-1 overflow-y-auto relative scroll-smooth rounded-3xl">
           {renderContent()}
         </main>
 

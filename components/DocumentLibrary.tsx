@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { MoreVertical, ArrowUpDown, Star, Archive, Trash2, Grid, List, Filter, FileText, Layers } from 'lucide-react';
-import { DOC_ICONS, STATUS_COLORS, STATUS_LABELS, getTagColor, PRIORITY_STYLES, PRIORITY_LABELS } from '../constants';
+import { DOC_ICONS, STATUS_COLORS, STATUS_LABELS, getTagColor, PRIORITY_STYLES, PRIORITY_LABELS, GLASS_STYLES } from '../constants';
 import { Document, DocumentType, ViewState, ViewMode } from '../types';
 import { useDocuments, useDocumentMutations } from '../hooks/useDocuments';
 
@@ -65,7 +65,7 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
 
   const toggleAll = () => {
     if (selectedIds.size === documents.length) {
-      setSelectedIds(new Set());
+      setSelectedIds(newSet());
     } else {
       setSelectedIds(new Set(documents.map(d => d.id)));
     }
@@ -93,32 +93,32 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
   };
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="flex flex-col h-full bg-transparent">
       {/* Toolbar */}
-      <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-white sticky top-0 z-10 backdrop-blur-xl bg-white/80">
+      <div className={`mx-6 mt-2 mb-4 px-6 py-4 flex items-center justify-between sticky top-0 z-20 rounded-2xl ${GLASS_STYLES.panel}`}>
         <div className="flex items-center gap-4">
            <h2 className="text-xl font-bold text-slate-800 mr-2 tracking-tight">{getPageTitle()}</h2>
-           <div className="h-6 w-[1px] bg-slate-200"></div>
+           <div className="h-6 w-[1px] bg-indigo-900/10"></div>
 
           <div className="flex items-center gap-2.5">
              <input 
                type="checkbox" 
                checked={selectedIds.size === documents.length && documents.length > 0}
                onChange={toggleAll}
-               className="rounded border-slate-300 text-primary focus:ring-primary h-4 w-4 cursor-pointer" 
+               className="rounded border-indigo-200 text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer bg-white/50" 
              />
-             <span className="text-sm text-slate-500 font-medium">
+             <span className="text-sm text-slate-600 font-medium">
                {selectedIds.size > 0 ? `Выбрано: ${selectedIds.size}` : 'Выбрать все'}
              </span>
           </div>
           {selectedIds.size > 0 && (
              <div className="flex items-center gap-2 animate-in fade-in duration-200 ml-2">
-               <button className="px-3 py-1.5 bg-white border border-slate-200 shadow-sm rounded-lg text-sm text-slate-700 hover:bg-slate-50 font-medium transition-colors">Скачать</button>
+               <button className={`px-3 py-1.5 rounded-lg text-sm text-slate-700 font-medium ${GLASS_STYLES.interactive} bg-white/40 border border-white/40`}>Скачать</button>
                {currentView !== 'trash' && (
                   <button 
                     onClick={handleBulkArchive}
                     disabled={mutationsLoading}
-                    className="px-3 py-1.5 bg-white border border-slate-200 shadow-sm rounded-lg text-sm text-slate-700 hover:bg-slate-50 font-medium transition-colors disabled:opacity-50"
+                    className={`px-3 py-1.5 rounded-lg text-sm text-slate-700 font-medium ${GLASS_STYLES.interactive} bg-white/40 border border-white/40 disabled:opacity-50`}
                   >
                     В архив
                   </button>
@@ -126,7 +126,7 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
                <button 
                  onClick={handleBulkDelete}
                  disabled={mutationsLoading}
-                 className="px-3 py-1.5 bg-white border border-slate-200 shadow-sm rounded-lg text-sm hover:bg-red-50 text-red-600 hover:text-red-700 hover:border-red-200 font-medium transition-colors disabled:opacity-50"
+                 className={`px-3 py-1.5 rounded-lg text-sm text-rose-600 font-medium hover:bg-rose-50 border border-rose-100 bg-white/40 disabled:opacity-50 transition-colors`}
                >
                   {currentView === 'trash' ? 'Удалить навсегда' : 'Удалить'}
                </button>
@@ -135,18 +135,18 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
         </div>
 
         <div className="flex items-center gap-2">
-           <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+           <div className="flex bg-white/30 p-0.5 rounded-xl border border-white/40 backdrop-blur-sm">
              <button 
                onClick={() => setViewMode('list')}
-               className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-white text-primary shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+               className={`p-1.5 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
              >
-               <List size={16} />
+               <List size={18} />
              </button>
              <button 
                onClick={() => setViewMode('grid')}
-               className={`p-1.5 rounded-md transition-all ${viewMode === 'grid' ? 'bg-white text-primary shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+               className={`p-1.5 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
              >
-               <Grid size={16} />
+               <Grid size={18} />
              </button>
            </div>
            <input
@@ -154,40 +154,40 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
              placeholder="Поиск..."
              value={searchQuery}
              onChange={(e) => setSearchQuery(e.target.value)}
-             className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-primary focus:border-primary"
+             className={`px-4 py-2 text-sm rounded-xl outline-none w-64 ${GLASS_STYLES.input}`}
            />
-           <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors border border-transparent hover:border-slate-200">
+           <button className={`p-2 text-slate-600 rounded-xl border border-white/40 ${GLASS_STYLES.interactive} bg-white/40`}>
              <Filter size={18} />
            </button>
         </div>
       </div>
 
       {currentView === 'trash' && (
-        <div className="bg-red-50 px-6 py-2.5 text-xs text-red-600 border-b border-red-100 flex items-center gap-2 font-medium">
+        <div className="mx-6 mb-4 bg-rose-50/80 backdrop-blur-sm px-6 py-2.5 text-xs text-rose-700 border border-rose-100 rounded-xl flex items-center gap-2 font-medium">
           <Trash2 size={14} /> Объекты в корзине будут автоматически удалены через 30 дней.
         </div>
       )}
 
       {/* Content Area */}
-      <div className="flex-1 overflow-auto bg-slate-50/50">
+      <div className="flex-1 overflow-auto px-6 pb-6">
         {loading ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-400 pb-20">
-            <div className="p-6 bg-white border border-slate-100 shadow-sm rounded-full mb-4 animate-pulse">
-              <FileText size={40} className="text-slate-300" />
+            <div className="p-6 bg-white/40 border border-white/50 shadow-sm rounded-full mb-4 animate-pulse backdrop-blur-sm">
+              <FileText size={40} className="text-indigo-300" />
             </div>
             <p className="text-lg font-medium text-slate-600">Загрузка документов...</p>
           </div>
         ) : error ? (
-          <div className="h-full flex flex-col items-center justify-center text-red-400 pb-20">
-            <div className="p-6 bg-white border border-red-100 shadow-sm rounded-full mb-4">
-              <FileText size={40} className="text-red-300" />
+          <div className="h-full flex flex-col items-center justify-center text-rose-400 pb-20">
+            <div className="p-6 bg-white/40 border border-rose-100 shadow-sm rounded-full mb-4 backdrop-blur-sm">
+              <FileText size={40} className="text-rose-300" />
             </div>
-            <p className="text-lg font-medium text-red-600">Ошибка загрузки</p>
-            <p className="text-sm text-red-400 mt-1">{error}</p>
+            <p className="text-lg font-medium text-rose-600">Ошибка загрузки</p>
+            <p className="text-sm text-rose-400 mt-1">{error}</p>
           </div>
         ) : documents.length === 0 ? (
            <div className="h-full flex flex-col items-center justify-center text-slate-400 pb-20">
-               <div className="p-6 bg-white border border-slate-100 shadow-sm rounded-full mb-4">
+               <div className="p-6 bg-white/40 border border-white/50 shadow-sm rounded-full mb-4 backdrop-blur-sm">
                  {currentView === 'favorites' ? <Star size={40} className="text-slate-300" /> : currentView === 'trash' ? <Trash2 size={40} className="text-slate-300" /> : <Archive size={40} className="text-slate-300" />}
                </div>
                <p className="text-lg font-medium text-slate-600">В этом разделе нет документов</p>
@@ -196,23 +196,23 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
         ) : (
           <>
             {viewMode === 'list' ? (
-              <table className="w-full text-left border-collapse bg-white">
-                <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
+              <table className="w-full text-left border-separate border-spacing-y-3">
+                <thead className="sticky top-0 z-10">
                   <tr>
-                    <th className="w-12 px-4 py-3 border-b border-slate-200"></th>
-                    <th className="w-12 px-4 py-3 border-b border-slate-200"></th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors group">
+                    <th className="w-12 px-4 py-2"></th>
+                    <th className="w-12 px-4 py-2"></th>
+                    <th className="px-4 py-2 text-xs font-bold text-indigo-900/50 uppercase tracking-wider cursor-pointer group">
                       <div className="flex items-center gap-1">Название <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-100" /></div>
                     </th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">Тип</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">Контрагент</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">Приоритет</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200 text-center">Дата</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">Статус</th>
-                    <th className="px-4 py-3 border-b border-slate-200"></th>
+                    <th className="px-4 py-2 text-xs font-bold text-indigo-900/50 uppercase tracking-wider">Тип</th>
+                    <th className="px-4 py-2 text-xs font-bold text-indigo-900/50 uppercase tracking-wider">Контрагент</th>
+                    <th className="px-4 py-2 text-xs font-bold text-indigo-900/50 uppercase tracking-wider">Приоритет</th>
+                    <th className="px-4 py-2 text-xs font-bold text-indigo-900/50 uppercase tracking-wider text-center">Дата</th>
+                    <th className="px-4 py-2 text-xs font-bold text-indigo-900/50 uppercase tracking-wider">Статус</th>
+                    <th className="px-4 py-2"></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="text-slate-700">
                   {documents.map((doc) => {
                     const IconComp = DOC_ICONS[doc.type as DocumentType] || DOC_ICONS.contract;
                     const isSelected = selectedIds.has(doc.id);
@@ -223,57 +223,59 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
                     return (
                       <tr 
                         key={doc.id} 
-                        className={`group transition-all duration-150 cursor-pointer ${isActive ? 'bg-blue-50/60' : 'hover:bg-slate-50'} ${isSelected ? 'bg-blue-50/40' : ''}`}
+                        className={`group transition-all duration-200 cursor-pointer hover:scale-[1.01] ${isActive ? 'bg-indigo-50/60 shadow-md ring-1 ring-indigo-200' : 'bg-white/40 hover:bg-white/60 shadow-sm hover:shadow-md'} ${isSelected ? 'bg-indigo-50/40' : ''} rounded-xl backdrop-blur-sm`}
                         onClick={() => onSelectDocument(doc)}
                       >
-                        <td className="px-4 py-3.5" onClick={(e) => { e.stopPropagation(); toggleSelection(doc.id); }}>
+                        <td className="px-4 py-4 rounded-l-xl" onClick={(e) => { e.stopPropagation(); toggleSelection(doc.id); }}>
                            <input 
                              type="checkbox" 
                              checked={isSelected}
                              readOnly
-                             className="rounded border-slate-300 text-primary focus:ring-primary h-4 w-4 cursor-pointer" 
+                             className="rounded border-indigo-200 text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer bg-white/50" 
                            />
                         </td>
-                        <td className="px-4 py-3.5 text-slate-400">
-                          <IconComp size={20} strokeWidth={1.5} />
+                        <td className="px-4 py-4 text-slate-500">
+                          <div className="p-2 bg-white/60 rounded-lg shadow-sm">
+                             <IconComp size={20} strokeWidth={1.5} className="text-indigo-600" />
+                          </div>
                         </td>
-                        <td className="px-4 py-3.5">
+                        <td className="px-4 py-4">
                           <div className="flex flex-col gap-1">
                              <div className="flex items-center gap-2">
-                                <span className="font-medium text-slate-800 text-sm leading-none">{doc.title}</span>
+                                <span className="font-bold text-slate-800 text-sm leading-none">{doc.title}</span>
                                 {doc.isFavorite && <Star size={12} className="text-amber-400 fill-amber-400" />}
                              </div>
                              <div className="flex items-center gap-2">
-                               <span className="text-xs text-slate-400">{doc.size}</span>
+                               <span className="text-xs text-slate-500">{doc.size}</span>
                                {doc.tags && doc.tags.map(tag => (
-                                  <span key={tag} className={`text-[10px] px-1.5 py-0.5 rounded border ${getTagColor(tag)}`}>
+                                  <span key={tag} className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${getTagColor(tag)} bg-opacity-50`}>
                                     {tag}
                                   </span>
                                ))}
                              </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3.5 text-sm text-slate-600 capitalize">
+                        <td className="px-4 py-4 text-sm text-slate-600 capitalize font-medium">
                           {doc.type}
                         </td>
-                        <td className="px-4 py-3.5 text-sm text-slate-600">
+                        <td className="px-4 py-4 text-sm text-slate-600 font-medium">
                           {doc.counterparty || '—'}
                         </td>
-                        <td className="px-4 py-3.5 text-sm">
-                           <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border ${priorityStyle}`}>
+                        <td className="px-4 py-4 text-sm">
+                           <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border uppercase tracking-wide ${priorityStyle}`}>
                               {priorityLabel}
                            </span>
                         </td>
-                        <td className="px-4 py-3.5 text-sm text-slate-600 text-center font-mono">
+                        <td className="px-4 py-4 text-sm text-slate-600 text-center font-mono opacity-80">
                           {new Date(doc.date).toLocaleDateString()}
                         </td>
-                        <td className="px-4 py-3.5">
-                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${STATUS_COLORS[doc.status]}`}>
+                        <td className="px-4 py-4">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border shadow-sm ${STATUS_COLORS[doc.status]}`}>
                             {STATUS_LABELS[doc.status]}
                           </span>
                         </td>
-                        <td className="px-4 py-3.5 text-right relative">
-                          <button className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200/50 opacity-0 group-hover:opacity-100 transition-all">
+                        <td className="px-4 py-4 text-right relative rounded-r-xl">
+                          <button className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-white/50 opacity-0 group-hover:opacity-100 transition-all">
                             <MoreVertical size={16} />
                           </button>
                         </td>
@@ -289,7 +291,7 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
                 </tbody>
               </table>
             ) : (
-              <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {documents.map((doc) => {
                   const IconComp = DOC_ICONS[doc.type as DocumentType] || DOC_ICONS.contract;
                   const isSelected = selectedIds.has(doc.id);
@@ -300,40 +302,40 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
                     <div 
                       key={doc.id}
                       onClick={() => onSelectDocument(doc)}
-                      className={`group relative bg-white rounded-xl border transition-all duration-200 cursor-pointer overflow-hidden flex flex-col ${isActive ? 'ring-2 ring-primary border-transparent shadow-md' : 'border-slate-200 hover:border-blue-300 hover:shadow-lg'}`}
+                      className={`group relative flex flex-col overflow-hidden transition-all duration-300 cursor-pointer rounded-2xl ${isActive ? 'ring-2 ring-indigo-500 shadow-xl scale-[1.02] bg-white/80' : 'hover:scale-105 hover:shadow-xl bg-white/60 hover:bg-white/80'} ${GLASS_STYLES.card}`}
                     >
                       {/* Grid Item Header */}
-                      <div className="p-4 flex items-start justify-between border-b border-slate-50 bg-slate-50/30">
-                         <div className={`p-2.5 rounded-lg ${isActive ? 'bg-primary text-white' : 'bg-white border border-slate-100 text-slate-500 group-hover:text-primary transition-colors'}`}>
-                           <IconComp size={24} strokeWidth={1.5} />
+                      <div className="p-5 flex items-start justify-between border-b border-white/20 bg-white/20">
+                         <div className={`p-3 rounded-xl shadow-sm ${isActive ? 'bg-indigo-500 text-white' : 'bg-white text-indigo-500 group-hover:text-indigo-600 transition-colors'}`}>
+                           <IconComp size={28} strokeWidth={1.5} />
                          </div>
                          <input 
                              type="checkbox" 
                              checked={isSelected}
                              onClick={(e) => { e.stopPropagation(); toggleSelection(doc.id); }}
-                             className={`rounded border-slate-300 text-primary focus:ring-primary h-4 w-4 cursor-pointer ${isSelected || isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} 
+                             className={`rounded border-indigo-200 text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer bg-white/50 ${isSelected || isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} 
                              readOnly
                            />
                       </div>
 
                       {/* Grid Item Body */}
-                      <div className="p-4 flex-1 flex flex-col">
-                        <h3 className="font-semibold text-slate-800 text-sm mb-1 line-clamp-2 leading-snug" title={doc.title}>
+                      <div className="p-5 flex-1 flex flex-col">
+                        <h3 className="font-bold text-slate-800 text-base mb-1 line-clamp-2 leading-snug" title={doc.title}>
                           {doc.title}
                         </h3>
-                        <p className="text-xs text-slate-500 mb-3">{doc.counterparty || '—'}</p>
+                        <p className="text-xs text-slate-500 mb-4 font-medium">{doc.counterparty || '—'}</p>
                         
                         <div className="mt-auto flex items-center justify-between">
-                           <span className={`text-[10px] font-medium px-2 py-0.5 rounded border ${priorityStyle}`}>
+                           <span className={`text-[10px] font-bold px-2 py-1 rounded border uppercase tracking-wide ${priorityStyle}`}>
                               {PRIORITY_LABELS[doc.priority]}
                            </span>
-                           <span className={`inline-block w-2 h-2 rounded-full ${STATUS_COLORS[doc.status].replace('bg-', 'bg-').split(' ')[1].replace('text-', 'bg-')}`}></span>
+                           <span className={`inline-block w-2.5 h-2.5 rounded-full ring-2 ring-white ${STATUS_COLORS[doc.status].replace('bg-', 'bg-').split(' ')[1].replace('text-', 'bg-')}`}></span>
                         </div>
                       </div>
 
                       {/* Grid Item Footer */}
-                      <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
-                         <span className="flex items-center gap-1"><FileText size={10} /> {doc.pages || 0} стр.</span>
+                      <div className="px-5 py-3 bg-white/30 border-t border-white/20 flex items-center justify-between text-[10px] text-slate-500 font-medium">
+                         <span className="flex items-center gap-1"><FileText size={12} /> {doc.pages || 0} стр.</span>
                          <span>{doc.size || '—'}</span>
                       </div>
                     </div>
@@ -347,18 +349,18 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
       
       {/* Pagination Footer */}
       {documents.length > 0 && documentsData && (
-        <div className="border-t border-slate-200 px-6 py-4 flex items-center justify-between bg-white text-sm text-slate-500 shrink-0">
+        <div className={`mx-6 mb-4 rounded-xl px-6 py-3 flex items-center justify-between text-sm text-slate-600 shrink-0 ${GLASS_STYLES.panel}`}>
           <div>Показано 1-{documents.length} из {documentsData.total}</div>
           <div className="flex items-center gap-2">
             <button 
-              className="px-3 py-1 border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-50 transition-colors" 
+              className={`px-3 py-1 rounded border border-white/40 hover:bg-white/50 disabled:opacity-50 transition-colors ${GLASS_STYLES.interactive}`} 
               disabled={documentsData.page <= 1}
             >
               Пред
             </button>
-            <div className="px-2 font-medium text-slate-700">{documentsData.page} / {documentsData.pages}</div>
+            <div className="px-2 font-bold text-indigo-900">{documentsData.page} / {documentsData.pages}</div>
             <button 
-              className="px-3 py-1 border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-50 transition-colors" 
+              className={`px-3 py-1 rounded border border-white/40 hover:bg-white/50 disabled:opacity-50 transition-colors ${GLASS_STYLES.interactive}`} 
               disabled={documentsData.page >= documentsData.pages}
             >
               След
