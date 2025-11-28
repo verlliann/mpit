@@ -44,7 +44,6 @@ npm run dev
 - **Vite** (сборщик)
 - **Tailwind CSS** (стили)
 - **FastAPI** (бэкенд, готов к интеграции)
-- **Gemini AI** (AI ассистент)
 
 ---
 
