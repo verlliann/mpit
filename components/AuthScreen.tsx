@@ -66,7 +66,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Пароль</label>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Пароль</label>
+                <a href="#" className="text-xs font-semibold text-indigo-500 hover:text-indigo-700 transition-colors hover:underline">Забыли пароль?</a>
+              </div>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-500 transition-colors">
                   <Lock size={20} />

@@ -16,7 +16,7 @@ export const GLASS_STYLES = {
   interactive: "hover:bg-white/50 transition-all duration-200 active:scale-95",
   
   // Inputs
-  input: "bg-white/50 border-white/40 focus:bg-white/70 focus:border-indigo-300 backdrop-blur-sm placeholder:text-slate-400",
+  input: "bg-white/50 border border-white/40 focus:bg-white/90 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 backdrop-blur-sm placeholder:text-slate-400 transition-all duration-200",
 };
 
 export const MOCK_DOCUMENTS: Document[] = [

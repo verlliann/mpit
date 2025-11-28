@@ -10,7 +10,9 @@ import {
   Trash2,
   Sparkles,
   Settings,
-  PieChart
+  PieChart,
+  HardDrive,
+  Cloud
 } from 'lucide-react';
 import { ViewState } from '../types';
 import { GLASS_STYLES } from '../constants';
@@ -30,7 +32,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onChangeView }) =>
     { immediate: hasToken }
   );
   const documentCount = metrics?.total_documents || 0;
-  
+  const storageUsed = metrics?.storage_used_gb || 0;
+  const storageTotal = metrics?.storage_total_gb || 10; // Default 10GB
+  const storagePercent = Math.min(100, Math.round((storageUsed / storageTotal) * 100));
+
   const NavItem = ({ view, icon: Icon, label, count }: { view: ViewState, icon: any, label: string, count?: number }) => (
     <button 
       onClick={() => onChangeView(view)}
@@ -87,6 +92,28 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onChangeView }) =>
          <div>
           <h3 className="text-xs font-bold text-indigo-900/50 uppercase tracking-widest mb-4 px-4">Система</h3>
           <NavItem view="settings" icon={Settings} label="Настройки" />
+        </div>
+
+        {/* Storage Widget */}
+        <div className="mt-auto mx-4 mb-4 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 backdrop-blur-sm">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-white rounded-lg text-indigo-600 shadow-sm">
+              <Cloud size={16} />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-indigo-900">Хранилище</p>
+              <p className="text-[10px] text-indigo-900/60 font-medium">{storageUsed.toFixed(1)} GB из {storageTotal} GB</p>
+            </div>
+          </div>
+          <div className="w-full h-1.5 bg-indigo-200/50 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-indigo-500 rounded-full transition-all duration-1000 ease-out"
+              style={{ width: `${storagePercent}%` }}
+            ></div>
+          </div>
+          <button className="w-full mt-3 text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-100/50 py-1.5 rounded-lg transition-colors text-center">
+            Увеличить объем
+          </button>
         </div>
 
         {activeView === 'library' && (

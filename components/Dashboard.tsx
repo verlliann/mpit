@@ -80,28 +80,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricCard 
           title="ВСЕГО ДОКУМЕНТОВ" 
-          value={metricsLoading ? "..." : (metrics?.total_documents || 0).toLocaleString()} 
+          value={metricsLoading ? <div className="h-9 w-24 bg-slate-200/50 animate-pulse rounded-lg"/> : (metrics?.total_documents || 0).toLocaleString()} 
           subtext="Всего документов в системе" 
           icon={FileText} 
           colorClass="bg-blue-500 text-blue-600" 
         />
         <MetricCard 
           title="Высокий приоритет" 
-          value={metricsLoading ? "..." : highPriorityCount.toString()} 
+          value={metricsLoading ? <div className="h-9 w-16 bg-slate-200/50 animate-pulse rounded-lg"/> : highPriorityCount.toString()} 
           subtext="Требуют немедленной реакции" 
           icon={Zap} 
           colorClass="bg-rose-500 text-rose-600" 
         />
         <MetricCard 
           title="Ср. время обработки" 
-          value={metricsLoading ? "..." : formatTime(avgTime)} 
+          value={metricsLoading ? <div className="h-9 w-20 bg-slate-200/50 animate-pulse rounded-lg"/> : formatTime(avgTime)} 
           subtext="Среднее время обработки" 
           icon={Clock} 
           colorClass="bg-indigo-500 text-indigo-600" 
         />
         <MetricCard 
           title="Обработано страниц" 
-          value={metricsLoading ? "..." : processedPages.toLocaleString()} 
+          value={metricsLoading ? <div className="h-9 w-24 bg-slate-200/50 animate-pulse rounded-lg"/> : processedPages.toLocaleString()} 
           subtext="Автоматически распознано" 
           icon={FileText} 
           colorClass="bg-emerald-500 text-emerald-600" 
@@ -112,7 +112,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricCard 
           title="Хранилище" 
-          value={metricsLoading ? "..." : formatStorage(storageUsed)} 
+          value={metricsLoading ? <div className="h-9 w-20 bg-slate-200/50 animate-pulse rounded-lg"/> : formatStorage(storageUsed)} 
           subtext={`${storagePercent}% использовано`} 
           icon={HardDrive} 
           colorClass="bg-slate-500 text-slate-600" 
@@ -238,13 +238,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                 const priorityLabel = PRIORITY_LABELS[doc.priority];
 
                 return (
-                    <tr key={doc.id} className={`transition-all duration-200 hover:scale-[1.01] ${GLASS_STYLES.interactive} bg-white/40 rounded-xl shadow-sm`}>
+                    <tr 
+                      key={doc.id} 
+                      onClick={() => onNavigate?.('library')}
+                      className={`transition-all duration-200 hover:scale-[1.005] hover:shadow-md cursor-pointer ${GLASS_STYLES.interactive} bg-white/40 rounded-xl shadow-sm group`}
+                    >
                     <td className="px-6 py-4 rounded-l-xl">
                         <div className="flex items-center gap-4">
-                        <div className="p-2.5 bg-white rounded-lg text-indigo-500 shadow-sm">
+                        <div className="p-2.5 bg-white rounded-lg text-indigo-500 shadow-sm group-hover:scale-110 transition-transform duration-200">
                             <IconComp size={18} />
                         </div>
-                        <span className="text-sm font-bold text-slate-800">{doc.title}</span>
+                        <div>
+                          <span className="text-sm font-bold text-slate-800 block group-hover:text-indigo-700 transition-colors">{doc.title}</span>
+                          <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">{doc.type}</span>
+                        </div>
                         </div>
                     </td>
                         <td className="px-6 py-4 text-sm font-medium">{doc.counterparty || '—'}</td>
