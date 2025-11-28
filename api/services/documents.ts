@@ -12,6 +12,17 @@ import type {
 
 export const documentsService = {
   /**
+   * Check if document with this filename already exists
+   */
+  async checkDuplicate(filename: string): Promise<{ exists: boolean; document?: any }> {
+    return apiClient.post<{ exists: boolean; document?: any }>(
+      `${API_ENDPOINTS.DOCUMENTS.LIST}/check-duplicate`,
+      null,
+      { params: { filename } }
+    );
+  },
+
+  /**
    * Get list of documents with filters
    */
   async getDocuments(params?: DocumentListParams): Promise<DocumentListResponse> {

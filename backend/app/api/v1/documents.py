@@ -241,6 +241,33 @@ async def get_document(
     }
 
 
+@router.post("/check-duplicate")
+async def check_duplicate(
+    filename: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Проверка существования документа по имени файла
+    """
+    result = await db.execute(
+        select(Document)
+        .where(Document.title == filename)
+        .where(Document.uploaded_by == current_user.id)
+        .where(Document.is_deleted == False)
+    )
+    existing_doc = result.scalar_one_or_none()
+    
+    return {
+        "exists": existing_doc is not None,
+        "document": {
+            "id": str(existing_doc.id),
+            "title": existing_doc.title,
+            "uploaded_at": existing_doc.created_at.isoformat()
+        } if existing_doc else None
+    }
+
+
 @router.post("/upload")
 async def upload_document(
     file: UploadFile = File(...),
@@ -264,6 +291,22 @@ async def upload_document(
     # Read file
     file_data = await file.read()
     file_size = len(file_data)
+    
+    # Проверка дублей по названию
+    filename = title or file.filename or "document"
+    result = await db.execute(
+        select(Document)
+        .where(Document.title == filename)
+        .where(Document.uploaded_by == current_user.id)
+        .where(Document.is_deleted == False)
+    )
+    existing_doc = result.scalar_one_or_none()
+    
+    if existing_doc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Документ с названием '{filename}' уже существует. Загружен {existing_doc.created_at.strftime('%d.%m.%Y %H:%M')}"
+        )
     
     # Find counterparty if provided
     counterparty_uuid = None
@@ -419,21 +462,28 @@ async def upload_document(
         "upload_url": None  # Будет сгенерирован в фоне
     }
     
-    # Добавляем фоновые задачи (выполнятся ПОСЛЕ отправки ответа)
-    async def background_save_rag_metrics():
-        """Фоновая задача для сохранения RAG метрик"""
-        try:
-            # Создаем новую сессию для фоновой задачи
-            async with AsyncSessionLocal() as bg_db:
-                await rag_service.save_metrics_to_postgres(
-                    db=bg_db,
-                    document_id=str(document.id),
-                    metrics=metrics,
-                    classification_result=classification
-                )
-            logger.info("✅ RAG сохранил метрики в Postgres (фоновая задача)")
-        except Exception as e:
-            logger.error(f"❌ Failed to save RAG metrics (фоновая задача): {e}")
+    # Запускаем RAG обработку через Celery
+    try:
+        from app.tasks.rag_tasks import process_document_rag
+        task = process_document_rag.delay(str(document.id))
+        logger.info(f"✅ RAG processing queued via Celery: task_id={task.id}")
+    except Exception as e:
+        logger.error(f"❌ Failed to queue RAG task: {e}")
+        # Fallback to background tasks if Celery is not available
+        async def background_save_rag_metrics():
+            """Фоновая задача для сохранения RAG метрик"""
+            try:
+                # Создаем новую сессию для фоновой задачи
+                async with AsyncSessionLocal() as bg_db:
+                    await rag_service.save_metrics_to_postgres(
+                        db=bg_db,
+                        document_id=str(document.id),
+                        metrics=metrics,
+                        classification_result=classification
+                    )
+                logger.info("✅ RAG сохранил метрики в Postgres (фоновая задача)")
+            except Exception as e:
+                logger.error(f"❌ Failed to save RAG metrics (фоновая задача): {e}")
     
     async def background_save_redis():
         """Фоновая задача для сохранения в Redis"""

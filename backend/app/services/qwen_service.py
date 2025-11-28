@@ -496,7 +496,8 @@ class QwenService:
                     top_p=top_p,
                     do_sample=True,
                     pad_token_id=self._tokenizer.pad_token_id,
-                    eos_token_id=self._tokenizer.eos_token_id
+                    eos_token_id=self._tokenizer.eos_token_id,
+                    repetition_penalty=1.2  # Штраф за повторения
                 )
             
             # Возвращаем модель на исходное устройство
@@ -507,10 +508,26 @@ class QwenService:
                 skip_special_tokens=True
             )
             
+            # Убираем промпт из ответа
             if generated_text.startswith(prompt):
                 generated_text = generated_text[len(prompt):].strip()
             
-            return generated_text
+            # Убираем "думающий" режим Qwen3 (теги <think>)
+            import re
+            generated_text = re.sub(r'<think>.*?</think>', '', generated_text, flags=re.DOTALL)
+            generated_text = re.sub(r'<\|.*?\|>', '', generated_text)  # Убираем спец. токены
+            
+            # Берем только первый абзац если есть повторения
+            lines = generated_text.strip().split('\n')
+            if lines:
+                # Находим первую непустую строку
+                for line in lines:
+                    line = line.strip()
+                    if line and not line.startswith('Answer:') and not line.startswith('Ответ:'):
+                        generated_text = line
+                        break
+            
+            return generated_text.strip()
             
         except Exception as e:
             logger.error(f"Ошибка при генерации текста: {e}")

@@ -93,6 +93,39 @@ services:
     networks:
       - sirius_network
 
+  # Celery Worker для RAG обработки
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sirius_celery_worker
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/sirius_dms
+      REDIS_URL: redis://redis:6379/0
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET_NAME: sirius-documents
+      MINIO_USE_SSL: "false"
+      QWEN_MODEL_PATH: ${QWEN_MODEL_PATH:-/app/models}
+      QWEN_DEVICE: ${QWEN_DEVICE:-cpu}
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/models:/app/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=1
+    networks:
+      - sirius_network
+
   # Frontend (React + Vite)
   frontend:
     build:

@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     # Application
     API_V1_PREFIX: str = "/api/v1"
     DEBUG: bool = True
-    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000,http://frontend:80,http://localhost:80"
+    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000,http://frontend:80,http://localhost:80,http://192.168.*.*:5173,http://192.168.*.*:3000,http://*:5173"
     
     def get_cors_origins(self) -> List[str]:
         """Parse CORS_ORIGINS string into list"""
@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
     
     # MinIO/S3
     MINIO_ENDPOINT: str = "localhost:9000"
@@ -58,6 +61,7 @@ class Settings(BaseSettings):
     RAG_TOP_K: int = 5
     RAG_CHUNK_SIZE: int = 500
     RAG_CHUNK_OVERLAP: int = 100
+    RAG_BATCH_SIZE: int = 4  # Оптимально для RTX 2050 (4GB VRAM), можно увеличить для более мощных карт
     
     class Config:
         env_file = ".env"

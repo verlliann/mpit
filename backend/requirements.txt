@@ -13,6 +13,10 @@ pgvector==0.2.4
 redis==5.0.1
 hiredis==2.2.3
 
+# Celery for background tasks
+celery==5.3.4
+celery[redis]==5.3.4
+
 # Storage (MinIO/S3)
 minio==7.2.0
 boto3==1.29.7

@@ -27,7 +27,35 @@ export const UploadScreen: React.FC = () => {
   const handleFiles = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
 
-    const newFiles: FileUpload[] = Array.from(fileList).map(file => ({
+    // Проверка дублей перед загрузкой
+    const filesToUpload: File[] = [];
+    const duplicates: string[] = [];
+
+    for (const file of Array.from(fileList)) {
+      try {
+        const response = await documentsService.checkDuplicate(file.name);
+        if (response.exists) {
+          duplicates.push(file.name);
+        } else {
+          filesToUpload.push(file);
+        }
+      } catch (error) {
+        // Если проверка не удалась, всё равно пытаемся загрузить
+        filesToUpload.push(file);
+      }
+    }
+
+    // Показываем предупреждение о дубликатах
+    if (duplicates.length > 0) {
+      const message = `Следующие файлы уже загружены:\n${duplicates.join('\n')}\n\nОни будут пропущены.`;
+      alert(message);
+    }
+
+    if (filesToUpload.length === 0) {
+      return;
+    }
+
+    const newFiles: FileUpload[] = filesToUpload.map(file => ({
       id: Date.now().toString() + Math.random(),
       file,
       status: 'uploading' as const,

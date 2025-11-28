@@ -1,11 +1,12 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { MoreVertical, ArrowUpDown, Star, Archive, Trash2, Grid, List, Filter, FileText, Layers } from 'lucide-react';
+import { MoreVertical, ArrowUpDown, Star, Archive, Trash2, Grid, List, Filter, FileText, Layers, Eye } from 'lucide-react';
 import { DOC_ICONS, STATUS_COLORS, STATUS_LABELS, getTagColor, PRIORITY_STYLES, PRIORITY_LABELS, GLASS_STYLES } from '../constants';
 import { Document, DocumentType, ViewState, ViewMode } from '../types';
 import { useDocuments, useDocumentMutations } from '../hooks/useDocuments';
 import { documentsService } from '../api/services/documents';
 import { useNotifications } from '../hooks/useNotifications';
+import { DocumentPreviewModal } from './DocumentPreviewModal';
 
 interface DocumentLibraryProps {
   onSelectDocument: (doc: Document | null) => void;
@@ -17,6 +18,7 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [searchQuery, setSearchQuery] = useState('');
+  const [previewDocument, setPreviewDocument] = useState<Document | null>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -320,10 +322,22 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
                             {STATUS_LABELS[doc.status]}
                           </span>
                         </td>
-                        <td className="px-4 py-4 text-right relative rounded-r-xl">
-                          <button className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-white/50 opacity-0 group-hover:opacity-100 transition-all">
-                            <MoreVertical size={16} />
-                          </button>
+                        <td className="px-4 py-4 text-right relative rounded-r-xl" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPreviewDocument(doc);
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50/50 transition-colors"
+                              title="Предпросмотр"
+                            >
+                              <Eye size={16} />
+                            </button>
+                            <button className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-white/50 transition-all">
+                              <MoreVertical size={16} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -415,6 +429,18 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
             </button>
           </div>
         </div>
+      )}
+
+      {/* Preview Modal */}
+      {previewDocument && (
+        <DocumentPreviewModal
+          isOpen={!!previewDocument}
+          onClose={() => setPreviewDocument(null)}
+          documentId={previewDocument.id}
+          documentTitle={previewDocument.title}
+          documentType={previewDocument.type}
+          documentPath={previewDocument.path}
+        />
       )}
     </div>
   );

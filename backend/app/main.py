@@ -125,13 +125,14 @@ async def log_requests(request: Request, call_next):
     
     return response
 
-# CORS middleware
+# CORS middleware - разрешаем все источники для локальной сети
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.get_cors_origins(),
+    allow_origins=["*"],  # Разрешаем все источники для доступа из локальной сети
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 # Include API router

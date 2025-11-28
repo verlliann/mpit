@@ -145,28 +145,55 @@ async def stream_message(
         
         # Формируем контекст из всех найденных чанков
         chunks = search_result.get("chunks", [])
-        context_parts = []
-        if chunks:
-            for chunk in chunks[:10]:  # Используем топ-10 для контекста
-                context_parts.append(f"- {chunk['document_title']}: {chunk['text'][:300]}")
+        documents = search_result.get("documents", [])
         
-        context = "\n".join(context_parts) if context_parts else "Нет релевантных документов."
-        
-        prompt = f"""Ты - AI ассистент системы управления документами Sirius DMS.
-Вопрос: {request.message}
-Контекст: {context}
-Ответь на вопрос."""
-        
-        # Generate response in chunks
-        try:
-            response = qwen_service._generate_text(
-                prompt=prompt,
-                max_new_tokens=512,
-                temperature=0.7
-            )
-        except Exception as e:
-            logger.error(f"❌ Ошибка при генерации ответа: {e}")
-            response = f"Найдено {len(chunks)} релевантных документов. Извините, не удалось сформировать ответ. Попробуйте переформулировать вопрос."
+        # Если документы не найдены, отвечаем сразу без генерации
+        if not chunks and not documents:
+            response = "По вашему запросу документы не найдены. Попробуйте изменить поисковый запрос или загрузите нужные документы в систему."
+        else:
+            # Собираем уникальные документы (без дублей)
+            unique_docs = {}
+            for chunk in chunks:
+                doc_id = chunk.get('document_id')
+                if doc_id and doc_id not in unique_docs:
+                    unique_docs[doc_id] = {
+                        'title': chunk.get('document_title', 'Документ'),
+                        'type': chunk.get('document_type', ''),
+                        'preview': chunk.get('text', '')[:200]
+                    }
+            
+            # Формируем контекст
+            context_parts = []
+            for doc_info in list(unique_docs.values())[:5]:  # Топ-5 уникальных документов
+                context_parts.append(f"• {doc_info['title']} ({doc_info['type']}): {doc_info['preview']}")
+            
+            context = "\n".join(context_parts) if context_parts else "Документы найдены"
+            
+            prompt = f"""Вопрос: {request.message}
+
+Найдено документов: {len(unique_docs)}
+
+Документы:
+{context}
+
+Ответь одним предложением, какие документы найдены:"""
+            
+            # Generate response
+            try:
+                response = qwen_service._generate_text(
+                    prompt=prompt,
+                    max_new_tokens=128,
+                    temperature=0.2
+                )
+                # Убираем возможные повторения и мусор
+                response = response.strip()
+                
+                # Если ответ слишком длинный или содержит повторения
+                if len(response) > 300 or response.count(response[:50]) > 2:
+                    response = f"Найдено {len(unique_docs)} документов: {', '.join([d['title'] for d in list(unique_docs.values())[:3]])}{'...' if len(unique_docs) > 3 else ''}."
+            except Exception as e:
+                logger.error(f"❌ Ошибка при генерации ответа: {e}")
+                response = f"Найдено {len(unique_docs)} документов. См. список ниже."
         
         # Stream response word by word
         words = response.split()

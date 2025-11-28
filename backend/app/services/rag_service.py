@@ -74,6 +74,17 @@ class RAGService:
                 
                 try:
                     outputs = model_cpu(**inputs_cpu, output_hidden_states=True)
+                    
+                    # Извлекаем последний скрытый слой
+                    hidden_states = outputs.hidden_states[-1]
+                    
+                    # Mean pooling: усредняем по токенам (axis=1)
+                    # Учитываем attention_mask для корректного усреднения
+                    attention_mask = inputs_cpu["attention_mask"]
+                    mask_expanded = attention_mask.unsqueeze(-1).expand(hidden_states.size()).float()
+                    sum_embeddings = torch.sum(hidden_states * mask_expanded, dim=1)
+                    sum_mask = torch.clamp(mask_expanded.sum(dim=1), min=1e-9)
+                    embedding = (sum_embeddings / sum_mask).squeeze().numpy()
                 finally:
                     # Возвращаем модель на исходное устройство
                     model.to(original_device)
@@ -141,11 +152,12 @@ class RAGService:
     
     def generate_embeddings_batch(self, texts: List[str], batch_size: int = None) -> List[np.ndarray]:
         """
-        Генерирует эмбеддинги для батча текстов (оптимизировано для A100 GPU)
+        Генерирует эмбеддинги для батча текстов (оптимизировано для различных GPU)
+        Автоматически определяет оптимальный batch_size в зависимости от VRAM
         
         Args:
             texts: Список текстов для обработки
-            batch_size: Размер батча (None = автоматический выбор для A100)
+            batch_size: Размер батча (None = автоматический выбор по VRAM)
             
         Returns:
             Список эмбеддингов
@@ -153,6 +165,8 @@ class RAGService:
         self._ensure_qwen_loaded()
         
         try:
+            import torch  # Импортируем torch в начале функции
+            
             model = self._qwen_service._model
             tokenizer = self._qwen_service._tokenizer
             
@@ -161,11 +175,27 @@ class RAGService:
             
             device = self._qwen_service._get_best_device()
             
-            # Автоматический выбор batch_size для A100
+            # Автоматический выбор batch_size в зависимости от устройства
             if batch_size is None:
-                if device == "cuda":
-                    # A100 может обрабатывать большие батчи
-                    batch_size = min(128, max(32, len(texts) // 5))
+                if device == "cuda" and torch.cuda.is_available():
+                    # Определяем размер VRAM для выбора оптимального batch_size
+                    try:
+                        vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                        if vram_gb >= 40:
+                            # A100/H100: большие батчи
+                            batch_size = min(128, max(32, len(texts) // 5))
+                        elif vram_gb >= 16:
+                            # RTX 3090/4090: средние батчи
+                            batch_size = min(32, max(8, len(texts) // 10))
+                        elif vram_gb >= 8:
+                            # RTX 3060/3070: малые батчи
+                            batch_size = min(16, max(4, len(texts) // 15))
+                        else:
+                            # RTX 2050/2060 (4GB): очень малые батчи
+                            batch_size = min(4, max(2, len(texts) // 20))
+                    except Exception:
+                        # Fallback для RTX 2050 (4GB)
+                        batch_size = min(4, max(2, len(texts) // 20))
                 elif device == "mps":
                     # MPS (Apple Silicon) - меньшие батчи
                     batch_size = min(16, max(4, len(texts) // 10))
@@ -190,14 +220,22 @@ class RAGService:
                     max_length=2048
                 )
                 
-                # Используем GPU (CUDA) для A100, иначе CPU для стабильности
+                # Используем GPU (CUDA) если доступно, иначе CPU для стабильности
                 if device == "cuda":
-                    # A100: используем GPU для максимальной производительности
+                    # CUDA: используем GPU, но с учетом ограничений памяти
                     inputs_gpu = {k: v.to(device) for k, v in inputs.items()}
                     
                     with torch.no_grad():
                         # Модель уже на GPU
-                        outputs = model(**inputs_gpu, output_hidden_states=True)
+                        # Для RTX 2050 (4GB) используем torch.cuda.empty_cache() если нужно
+                        try:
+                            outputs = model(**inputs_gpu, output_hidden_states=True)
+                        except torch.cuda.OutOfMemoryError:
+                            # Если не хватает памяти, очищаем кэш и пробуем меньший батч
+                            torch.cuda.empty_cache()
+                            logger.warning(f"⚠️ Недостаточно VRAM для batch_size={batch_size}, уменьшаю...")
+                            # Рекурсивно вызываем с меньшим батчем
+                            return self.generate_embeddings_batch(texts, batch_size=max(1, batch_size // 2))
                         
                         hidden_states = outputs.hidden_states[-1]  # [batch_size, seq_len, hidden_size]
                         attention_mask = inputs_gpu.get('attention_mask', None)
@@ -279,33 +317,47 @@ class RAGService:
                 logger.warning(f"Нет чанков для сохранения документа {document_id}")
                 return
             
-            # Оптимизация: генерируем эмбеддинги батчами (оптимизировано для A100)
+            # Оптимизация: генерируем эмбеддинги батчами
             chunk_texts = [chunk_data["text"] for chunk_data in chunks]
             
-            # Автоматический выбор batch_size (для A100 будет 32-128)
+            # Автоматический выбор batch_size
             chunk_embeddings = self.generate_embeddings_batch(chunk_texts, batch_size=None)
-            logger.info(f"✅ Сгенерировано {len(chunk_embeddings)} эмбеддингов")
+            
+            # Логируем размерность для диагностики
+            if chunk_embeddings:
+                emb_dim = len(chunk_embeddings[0]) if hasattr(chunk_embeddings[0], '__len__') else chunk_embeddings[0].shape[0]
+                logger.info(f"✅ Сгенерировано {len(chunk_embeddings)} эмбеддингов, размерность: {emb_dim}")
+            else:
+                logger.warning("⚠️ Не удалось сгенерировать эмбеддинги")
             
             # Создаем чанки с эмбеддингами
+            saved_count = 0
             for i, (chunk_data, chunk_embedding) in enumerate(zip(chunks, chunk_embeddings)):
-                chunk = DocumentChunk(
-                    id=uuid.uuid4(),
-                    document_id=uuid.UUID(document_id),
-                    chunk_id=i,
-                    text=chunk_data["text"],
-                    start_pos=chunk_data["start_pos"],
-                    end_pos=chunk_data["end_pos"],
-                    embedding=chunk_embedding.tolist(),
-                    chunk_metadata=json.dumps({
-                        "filename": metrics.get("filename"),
-                        "classification": classification_result
-                    })
-                )
-                
-                db.add(chunk)
+                try:
+                    # Проверяем размерность эмбеддинга
+                    emb_list = chunk_embedding.tolist() if hasattr(chunk_embedding, 'tolist') else list(chunk_embedding)
+                    
+                    chunk = DocumentChunk(
+                        id=uuid.uuid4(),
+                        document_id=uuid.UUID(document_id),
+                        chunk_id=i,
+                        text=chunk_data["text"],
+                        start_pos=chunk_data["start_pos"],
+                        end_pos=chunk_data["end_pos"],
+                        embedding=emb_list,
+                        chunk_metadata=json.dumps({
+                            "filename": metrics.get("filename"),
+                            "classification": classification_result
+                        })
+                    )
+                    
+                    db.add(chunk)
+                    saved_count += 1
+                except Exception as chunk_error:
+                    logger.error(f"❌ Ошибка при создании чанка {i}: {chunk_error}")
             
             await db.commit()
-            logger.info(f"✅ RAG сохранил {len(chunks)} чанков в Postgres для документа {document_id}")
+            logger.info(f"✅ RAG сохранил {saved_count}/{len(chunks)} чанков в Postgres для документа {document_id}")
             
         except Exception as e:
             await db.rollback()
