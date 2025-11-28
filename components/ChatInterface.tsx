@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles, Loader2 } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Loader2, Copy, Check } from 'lucide-react';
 import { chatService } from '../api/services/chat';
 import { GLASS_STYLES } from '../constants';
 
@@ -22,6 +22,7 @@ export const ChatInterface: React.FC = () => {
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -31,6 +32,12 @@ export const ChatInterface: React.FC = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const handleCopy = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
 
   const handleSendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
@@ -132,13 +139,27 @@ export const ChatInterface: React.FC = () => {
               )}
               
               <div 
-                className={`max-w-[75%] px-6 py-4 rounded-2xl text-sm leading-relaxed shadow-md whitespace-pre-wrap backdrop-blur-md ${
+                className={`max-w-[75%] px-6 py-4 rounded-2xl text-sm leading-relaxed shadow-md whitespace-pre-wrap backdrop-blur-md relative group/msg ${
                   isUser 
                     ? 'bg-gradient-to-br from-blue-600 to-purple-600 text-white rounded-tr-sm shadow-indigo-500/20' 
                     : 'bg-white/60 border border-white/50 text-slate-700 rounded-tl-sm'
                 }`}
               >
                 {msg.text}
+                {!isUser && (
+                  <div className="absolute top-2 right-2 opacity-0 group-hover/msg:opacity-100 transition-opacity">
+                    <button 
+                      onClick={() => handleCopy(msg.text, msg.id)}
+                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-white/50 rounded-lg transition-colors"
+                      title="Копировать ответ"
+                    >
+                      {copiedId === msg.id ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                )}
+                <div className={`text-[10px] mt-2 font-medium ${isUser ? 'text-blue-100/70 text-right' : 'text-slate-400'}`}>
+                  {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
               </div>
 
               {isUser && (

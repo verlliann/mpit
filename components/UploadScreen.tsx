@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { UploadCloud, File, X, Check, FileText, Image, FileSpreadsheet, AlertCircle } from 'lucide-react';
+import { UploadCloud, File, X, Check, FileText, Image, FileSpreadsheet, AlertCircle, Eye, Trash2 } from 'lucide-react';
 import { documentsService } from '../api/services/documents';
 import { useDocumentUpload } from '../hooks/useDocuments';
 import { GLASS_STYLES } from '../constants';
@@ -138,14 +138,22 @@ export const UploadScreen: React.FC = () => {
       {files.length > 0 && (
         <div className={`mt-8 rounded-2xl overflow-hidden ${GLASS_STYLES.panel}`}>
           <div className="px-6 py-5 border-b border-white/20 font-bold text-slate-800 bg-white/30 backdrop-blur-md flex justify-between items-center">
-            <span>Очередь обработки</span>
-            <span className="text-xs font-bold bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-lg">{files.length}</span>
+            <div className="flex items-center gap-3">
+               <span>Очередь обработки</span>
+               <span className="text-xs font-bold bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-lg">{files.length}</span>
+            </div>
+            <button 
+               onClick={() => setFiles([])} 
+               className="text-xs text-slate-500 hover:text-rose-600 font-medium flex items-center gap-1 transition-colors"
+            >
+               <Trash2 size={14} /> Очистить список
+            </button>
           </div>
           <div className="divide-y divide-white/20 max-h-[300px] overflow-y-auto">
             {files.map((fileUpload) => {
               const FileIcon = getFileIcon(fileUpload.file.name);
               return (
-              <div key={fileUpload.id} className="px-6 py-4 flex items-center justify-between hover:bg-white/30 transition-colors">
+              <div key={fileUpload.id} className="px-6 py-4 flex items-center justify-between hover:bg-white/30 transition-colors group">
                 <div className="flex items-center gap-4">
                   <div className={`p-3 rounded-xl ${fileUpload.status === 'error' ? 'bg-rose-50 text-rose-500' : 'bg-white/60 text-indigo-500'} shadow-sm`}>
                     <FileIcon size={24} />
@@ -162,7 +170,7 @@ export const UploadScreen: React.FC = () => {
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-6">
+                <div className="flex items-center gap-4">
                   {fileUpload.status === 'uploading' ? (
                      <div className="flex items-center gap-3 w-48">
                        <div className="flex-1 h-2 bg-slate-200/50 rounded-full overflow-hidden">
@@ -179,9 +187,19 @@ export const UploadScreen: React.FC = () => {
                       <span className="text-xs font-bold">Ошибка</span>
                      </div>
                   ) : (
-                    <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg">
-                      <Check size={16} />
-                      <span className="text-xs font-bold">Готово</span>
+                    <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg">
+                            <Check size={16} />
+                            <span className="text-xs font-bold">Готово</span>
+                        </div>
+                        {fileUpload.documentId && (
+                            <button 
+                                className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                title="Просмотреть"
+                            >
+                                <Eye size={18} />
+                            </button>
+                        )}
                     </div>
                   )}
                   <button 
