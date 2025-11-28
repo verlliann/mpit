@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, FileText, ArrowRight, LayoutDashboard, Files, Users, PieChart, Settings } from 'lucide-react';
-import { MOCK_DOCUMENTS } from '../constants';
+import { Search, FileText, ArrowRight, LayoutDashboard, Files, Users, PieChart, Settings, Command } from 'lucide-react';
+import { MOCK_DOCUMENTS, GLASS_STYLES } from '../constants';
 import { ViewState } from '../types';
 
 interface CommandPaletteProps {
@@ -71,15 +71,15 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] px-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={onClose} />
+      <div className="absolute inset-0 bg-indigo-900/30 backdrop-blur-sm transition-opacity" onClick={onClose} />
       
-      <div className="relative w-full max-w-2xl bg-white rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 ring-1 ring-slate-900/5">
-        <div className="flex items-center px-4 py-3 border-b border-slate-100">
-          <Search className="w-5 h-5 text-slate-400 mr-3" />
+      <div className={`relative w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 rounded-2xl shadow-2xl border border-white/40 ${GLASS_STYLES.modal}`}>
+        <div className="flex items-center px-5 py-4 border-b border-white/20 bg-white/40 backdrop-blur-md">
+          <Search className="w-5 h-5 text-slate-500 mr-3" />
           <input
             ref={inputRef}
             type="text"
-            className="flex-1 bg-transparent border-none focus:ring-0 text-slate-800 placeholder:text-slate-400 text-lg outline-none"
+            className="flex-1 bg-transparent border-none focus:ring-0 text-slate-800 placeholder:text-slate-500 text-lg outline-none font-medium"
             placeholder="Что вы ищете? (Документы, разделы, настройки...)"
             value={query}
             onChange={(e) => {
@@ -89,33 +89,34 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
             onKeyDown={handleKeyDown}
           />
           <div className="hidden sm:flex items-center gap-1">
-             <kbd className="px-2 py-1 bg-slate-100 rounded text-xs text-slate-500 font-mono">Esc</kbd>
+             <kbd className="px-2 py-1 bg-white/50 border border-white/30 rounded-lg text-xs text-slate-500 font-mono shadow-sm">Esc</kbd>
           </div>
         </div>
 
-        <div className="max-h-[60vh] overflow-y-auto py-2">
+        <div className="max-h-[60vh] overflow-y-auto py-2 bg-white/60 backdrop-blur-md">
           {allItems.length === 0 ? (
-            <div className="px-6 py-10 text-center text-slate-500">
-              Ничего не найдено
+            <div className="px-6 py-12 text-center text-slate-500 flex flex-col items-center gap-3">
+              <div className="p-3 bg-white/50 rounded-full"><Command size={24} className="text-slate-400" /></div>
+              <p className="font-medium">Ничего не найдено</p>
             </div>
           ) : (
             <>
               {filteredNav.length > 0 && (
                 <div className="mb-2">
-                  <div className="px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Навигация</div>
+                  <div className="px-5 py-2 text-xs font-bold text-slate-400 uppercase tracking-widest">Навигация</div>
                   {filteredNav.map((item, idx) => {
                     const isActive = idx === selectedIndex;
                     return (
                       <div
                         key={item.label}
                         onClick={() => { onNavigate(item.view); onClose(); }}
-                        className={`px-4 py-3 mx-2 rounded-lg cursor-pointer flex items-center justify-between transition-colors ${isActive ? 'bg-primary text-white' : 'text-slate-700 hover:bg-slate-50'}`}
+                        className={`px-4 py-3 mx-2 rounded-xl cursor-pointer flex items-center justify-between transition-all duration-200 ${isActive ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-lg shadow-indigo-500/30' : 'text-slate-700 hover:bg-white/50'}`}
                       >
                         <div className="flex items-center gap-3">
-                          <item.icon size={18} className={isActive ? 'text-white' : 'text-slate-400'} />
-                          <span className="font-medium">{item.label}</span>
+                          <item.icon size={20} className={isActive ? 'text-white' : 'text-slate-500'} />
+                          <span className="font-bold">{item.label}</span>
                         </div>
-                        {isActive && <ArrowRight size={16} className="opacity-70" />}
+                        {isActive && <ArrowRight size={18} className="opacity-80" />}
                       </div>
                     );
                   })}
@@ -124,23 +125,23 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
 
               {filteredDocs.length > 0 && (
                 <div>
-                  <div className="px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Документы</div>
+                  <div className="px-5 py-2 text-xs font-bold text-slate-400 uppercase tracking-widest">Документы</div>
                   {filteredDocs.map((doc, idx) => {
                     const globalIdx = filteredNav.length + idx;
                     const isActive = globalIdx === selectedIndex;
                     return (
                       <div
                         key={doc.id}
-                        className={`px-4 py-3 mx-2 rounded-lg cursor-pointer flex items-center justify-between transition-colors ${isActive ? 'bg-primary text-white' : 'text-slate-700 hover:bg-slate-50'}`}
+                        className={`px-4 py-3 mx-2 rounded-xl cursor-pointer flex items-center justify-between transition-all duration-200 ${isActive ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-lg shadow-indigo-500/30' : 'text-slate-700 hover:bg-white/50'}`}
                       >
                          <div className="flex items-center gap-3">
-                          <FileText size={18} className={isActive ? 'text-white' : 'text-slate-400'} />
+                          <FileText size={20} className={isActive ? 'text-white' : 'text-slate-500'} />
                           <div>
-                             <div className="font-medium">{doc.title}</div>
-                             <div className={`text-xs ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>{doc.counterparty} • {new Date(doc.date).toLocaleDateString()}</div>
+                             <div className="font-bold">{doc.title}</div>
+                             <div className={`text-xs font-medium ${isActive ? 'text-blue-100' : 'text-slate-500'}`}>{doc.counterparty} • {new Date(doc.date).toLocaleDateString()}</div>
                           </div>
                         </div>
-                        {isActive && <span className="text-xs bg-white/20 px-2 py-1 rounded text-white">Enter</span>}
+                        {isActive && <span className="text-xs bg-white/20 px-2 py-1 rounded-lg text-white font-bold">Enter</span>}
                       </div>
                     );
                   })}
@@ -150,12 +151,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
           )}
         </div>
         
-        <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+        <div className="px-5 py-3 bg-white/40 border-t border-white/20 flex items-center justify-between text-xs text-slate-500 font-medium backdrop-blur-md">
           <div className="flex gap-4">
-             <span><span className="font-bold">↑↓</span> для навигации</span>
-             <span><span className="font-bold">Enter</span> для выбора</span>
+             <span><span className="font-bold bg-white/50 px-1 rounded border border-white/30">↑↓</span> для навигации</span>
+             <span><span className="font-bold bg-white/50 px-1 rounded border border-white/30">Enter</span> для выбора</span>
           </div>
-          <div>
+          <div className="flex items-center gap-1">
+            <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>
             Sirius Intelligent Search
           </div>
         </div>

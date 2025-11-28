@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
-import { UploadCloud, File, X, Check } from 'lucide-react';
+import { UploadCloud, File, X, Check, FileText, Image, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import { documentsService } from '../api/services/documents';
 import { useDocumentUpload } from '../hooks/useDocuments';
+import { GLASS_STYLES } from '../constants';
 
 interface FileUpload {
   id: string;
@@ -22,6 +23,13 @@ export const UploadScreen: React.FC = () => {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  const getFileIcon = (fileName: string) => {
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    if (['jpg', 'jpeg', 'png', 'gif'].includes(ext || '')) return Image;
+    if (['xlsx', 'xls', 'csv'].includes(ext || '')) return FileSpreadsheet;
+    return FileText;
   };
 
   const handleFiles = async (fileList: FileList | null) => {
@@ -85,31 +93,35 @@ export const UploadScreen: React.FC = () => {
   };
 
   return (
-    <div className="p-8 max-w-4xl mx-auto h-full flex flex-col">
-      <h2 className="text-2xl font-bold text-slate-800 mb-6">Загрузка документов</h2>
+    <div className="p-8 max-w-5xl mx-auto h-full flex flex-col">
+      <div className="flex items-center justify-between mb-8">
+        <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Загрузка документов</h2>
+      </div>
       
       {/* Drag Zone */}
       <div 
-        className={`flex-1 border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-12 transition-all duration-200 ${
+        className={`flex-1 border-2 border-dashed rounded-3xl flex flex-col items-center justify-center p-12 transition-all duration-300 backdrop-blur-sm ${
           isDragging 
-            ? 'border-primary bg-blue-50' 
-            : 'border-slate-300 bg-slate-50 hover:bg-slate-100'
+            ? 'border-indigo-500 bg-indigo-50/40 scale-[0.99]' 
+            : 'border-white/40 bg-white/30 hover:bg-white/40 hover:border-white/60'
         }`}
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
       >
-        <div className={`p-6 rounded-full bg-white shadow-sm mb-6 ${isDragging ? 'text-primary' : 'text-slate-400'}`}>
-          <UploadCloud size={48} />
+        <div className={`p-8 rounded-full bg-gradient-to-br from-white to-white/50 shadow-lg mb-8 transition-transform duration-300 ${isDragging ? 'scale-110 text-indigo-600' : 'text-slate-400'}`}>
+          <UploadCloud size={64} strokeWidth={1.5} />
         </div>
-        <h3 className="text-lg font-medium text-slate-700 mb-2">Перетащите файлы сюда</h3>
-        <p className="text-slate-500 text-sm mb-6 text-center max-w-md">
-          Поддерживаются PDF, DOCX, XLSX, JPEG, PNG. Максимальный размер файла 50 МБ.
+        <h3 className="text-xl font-bold text-slate-800 mb-3">Перетащите файлы сюда</h3>
+        <p className="text-slate-500 text-base mb-8 text-center max-w-md leading-relaxed font-medium">
+          Мы поддерживаем PDF, DOCX, XLSX, JPEG, PNG. <br/>
+          Максимальный размер одного файла — 50 МБ.
         </p>
         <button 
           onClick={() => fileInputRef.current?.click()}
-          className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-blue-700 font-medium shadow-sm transition-transform active:scale-95"
+          className="px-8 py-4 bg-gradient-to-r from-indigo-500 to-blue-600 text-white rounded-xl hover:shadow-lg hover:shadow-indigo-500/30 font-bold transition-all active:scale-95 flex items-center gap-2"
         >
+          <UploadCloud size={20} />
           Выбрать файлы на компьютере
         </button>
         <input
@@ -124,57 +136,63 @@ export const UploadScreen: React.FC = () => {
 
       {/* Upload Queue */}
       {files.length > 0 && (
-        <div className="mt-8 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100 font-medium text-slate-700">
-            Очередь обработки ({files.length})
+        <div className={`mt-8 rounded-2xl overflow-hidden ${GLASS_STYLES.panel}`}>
+          <div className="px-6 py-5 border-b border-white/20 font-bold text-slate-800 bg-white/30 backdrop-blur-md flex justify-between items-center">
+            <span>Очередь обработки</span>
+            <span className="text-xs font-bold bg-indigo-100 text-indigo-700 px-2.5 py-1 rounded-lg">{files.length}</span>
           </div>
-          <div className="divide-y divide-slate-100">
-            {files.map((fileUpload) => (
-              <div key={fileUpload.id} className="px-6 py-4 flex items-center justify-between">
+          <div className="divide-y divide-white/20 max-h-[300px] overflow-y-auto">
+            {files.map((fileUpload) => {
+              const FileIcon = getFileIcon(fileUpload.file.name);
+              return (
+              <div key={fileUpload.id} className="px-6 py-4 flex items-center justify-between hover:bg-white/30 transition-colors">
                 <div className="flex items-center gap-4">
-                  <div className="p-2 bg-slate-100 rounded text-slate-500">
-                    <File size={20} />
+                  <div className={`p-3 rounded-xl ${fileUpload.status === 'error' ? 'bg-rose-50 text-rose-500' : 'bg-white/60 text-indigo-500'} shadow-sm`}>
+                    <FileIcon size={24} />
                   </div>
                   <div>
-                    <div className="text-sm font-medium text-slate-800">{fileUpload.file.name}</div>
-                    <div className="text-xs text-slate-400">{formatFileSize(fileUpload.file.size)}</div>
+                    <div className="text-sm font-bold text-slate-800 mb-0.5">{fileUpload.file.name}</div>
+                    <div className="text-xs text-slate-500 font-medium">{formatFileSize(fileUpload.file.size)}</div>
                     {fileUpload.error && (
-                      <div className="text-xs text-red-500 mt-1">{fileUpload.error}</div>
+                      <div className="text-xs text-rose-500 mt-1 font-medium flex items-center gap-1">
+                        <AlertCircle size={12} />
+                        {fileUpload.error}
+                      </div>
                     )}
                   </div>
                 </div>
                 
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-6">
                   {fileUpload.status === 'uploading' ? (
-                     <div className="flex items-center gap-3">
-                       <div className="h-1.5 w-24 bg-slate-100 rounded-full overflow-hidden">
+                     <div className="flex items-center gap-3 w-48">
+                       <div className="flex-1 h-2 bg-slate-200/50 rounded-full overflow-hidden">
                          <div 
-                           className="h-full bg-primary transition-all duration-300"
+                           className="h-full bg-indigo-500 rounded-full transition-all duration-300 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
                            style={{ width: `${fileUpload.progress}%` }}
                          ></div>
                        </div>
-                       <span className="text-xs text-slate-500">Загрузка...</span>
+                       <span className="text-xs font-bold text-indigo-600 w-8 text-right">{fileUpload.progress.toFixed(0)}%</span>
                      </div>
                   ) : fileUpload.status === 'error' ? (
-                    <div className="flex items-center gap-2 text-red-500">
+                    <div className="flex items-center gap-2 text-rose-500 bg-rose-50 px-3 py-1.5 rounded-lg">
                       <X size={16} />
-                      <span className="text-xs font-medium">Ошибка</span>
+                      <span className="text-xs font-bold">Ошибка</span>
                      </div>
                   ) : (
-                    <div className="flex items-center gap-2 text-success">
+                    <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg">
                       <Check size={16} />
-                      <span className="text-xs font-medium">Готово</span>
+                      <span className="text-xs font-bold">Готово</span>
                     </div>
                   )}
                   <button 
                     onClick={() => removeFile(fileUpload.id)}
-                    className="text-slate-400 hover:text-danger transition-colors"
+                    className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
                   >
-                    <X size={16} />
+                    <X size={18} />
                   </button>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         </div>
       )}
