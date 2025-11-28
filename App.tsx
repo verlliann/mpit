@@ -26,6 +26,8 @@ export default function App() {
   const [selectedCounterparty, setSelectedCounterparty] = useState<Counterparty | null>(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   // Initialize Theme
   React.useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
@@ -120,17 +122,23 @@ export default function App() {
         onNavigate={setActiveView} 
         onLogout={handleLogout}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        onToggleMobileMenu={() => setIsMobileMenuOpen(true)}
       />
       
       <div className="flex flex-1 overflow-hidden relative p-4 gap-4">
-        <Sidebar activeView={activeView} onChangeView={(view) => {
-          setActiveView(view);
-          if (view !== 'library' && view !== 'favorites' && view !== 'archive' && view !== 'trash') {
-            setSelectedDocument(null);
-          }
-          if (view !== 'counterparties') {
-            setSelectedCounterparty(null);
-          }
+        <Sidebar 
+          activeView={activeView} 
+          isOpen={isMobileMenuOpen}
+          onClose={() => setIsMobileMenuOpen(false)}
+          onChangeView={(view) => {
+            setActiveView(view);
+            setIsMobileMenuOpen(false); // Close sidebar on selection
+            if (view !== 'library' && view !== 'favorites' && view !== 'archive' && view !== 'trash') {
+              setSelectedDocument(null);
+            }
+            if (view !== 'counterparties') {
+              setSelectedCounterparty(null);
+            }
         }} />
         
         <main className="flex-1 overflow-y-auto relative scroll-smooth rounded-3xl">

@@ -14,7 +14,7 @@ interface DocumentPreviewProps {
 }
 
 export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ document, onClose, onUpdate }) => {
-  const [activeTab, setActiveTab] = useState<'info' | 'history'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'content' | 'history'>('info');
   const [isEditing, setIsEditing] = useState(false);
   const [editedDoc, setEditedDoc] = useState<Document | null>(null);
   const [newTag, setNewTag] = useState('');
@@ -186,6 +186,13 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ document, onCl
              >
                Информация
                {activeTab === 'info' && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-t-full shadow-[0_0_10px_rgba(79,70,229,0.6)]"></span>}
+             </button>
+             <button 
+               onClick={() => setActiveTab('content')}
+               className={`pb-3 font-bold transition-colors relative ${activeTab === 'content' ? 'text-indigo-600' : 'text-slate-500 hover:text-indigo-500'}`}
+             >
+               Файл
+               {activeTab === 'content' && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-t-full shadow-[0_0_10px_rgba(79,70,229,0.6)]"></span>}
              </button>
              <button 
                onClick={() => setActiveTab('history')}
@@ -479,6 +486,39 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ document, onCl
                    </div>
                  </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'content' && (
+            <div className="animate-in fade-in duration-300 h-full flex flex-col">
+               <div className="flex-1 bg-slate-50 rounded-xl border border-slate-200 flex flex-col items-center justify-center p-8 relative overflow-hidden group">
+                  <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:16px_16px] opacity-50"></div>
+                  
+                  <div className="relative z-10 flex flex-col items-center text-center">
+                    <div className="w-20 h-24 bg-white shadow-lg rounded-lg border border-slate-200 mb-4 flex items-center justify-center relative transform group-hover:scale-105 transition-transform duration-300">
+                       <div className="absolute top-0 right-0 w-6 h-6 bg-slate-100 rounded-bl-lg border-b border-l border-slate-200"></div>
+                       <IconComp size={32} className="text-slate-400" strokeWidth={1.5} />
+                    </div>
+                    <h4 className="text-slate-800 font-bold mb-1">Предпросмотр недоступен</h4>
+                    <p className="text-xs text-slate-500 max-w-[200px] mb-6">Файл "{document.title}" не поддерживает предпросмотр в браузере.</p>
+                    <button 
+                      onClick={handleDownload}
+                      className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-500/20 transition-all active:scale-95 flex items-center gap-2"
+                    >
+                      <Download size={16} /> Скачать файл ({document.size})
+                    </button>
+                  </div>
+               </div>
+               
+               <div className="mt-4 p-4 bg-indigo-50/50 border border-indigo-100 rounded-xl">
+                  <h5 className="text-xs font-bold text-indigo-900 mb-2 flex items-center gap-1.5">
+                    <Zap size={14} /> AI Analysis
+                  </h5>
+                  <p className="text-[10px] text-slate-600 leading-relaxed">
+                    Документ был автоматически классифицирован как <span className="font-bold">{document.type}</span>. 
+                    Система обнаружила ключевые сущности: <span className="font-bold">{document.counterparty}</span>, сумма и дата.
+                  </p>
+               </div>
             </div>
           )}
 

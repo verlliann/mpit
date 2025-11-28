@@ -12,7 +12,8 @@ import {
   Settings,
   PieChart,
   HardDrive,
-  Cloud
+  Cloud,
+  X
 } from 'lucide-react';
 import { ViewState } from '../types';
 import { GLASS_STYLES } from '../constants';
@@ -22,9 +23,11 @@ import { useApi } from '../hooks/useApi';
 interface SidebarProps {
   activeView: ViewState;
   onChangeView: (view: ViewState) => void;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeView, onChangeView }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeView, onChangeView, isOpen = false, onClose }) => {
   // Get document count from API
   const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('access_token');
   const { data: metrics } = useApi(
@@ -67,10 +70,31 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onChangeView }) =>
   );
 
   return (
-    <aside className={`w-72 flex-shrink-0 flex flex-col overflow-y-auto rounded-3xl ${GLASS_STYLES.panel}`}>
-      <div className="p-5 space-y-8">
+    <>
+      {/* Mobile Overlay */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 md:hidden"
+          onClick={onClose}
+        />
+      )}
+      
+      <aside className={`
+        flex-col overflow-y-auto rounded-3xl ${GLASS_STYLES.panel}
+        fixed md:static inset-y-4 left-4 z-50 w-72 transition-transform duration-300 ease-in-out
+        ${isOpen ? 'translate-x-0' : '-translate-x-[120%] md:translate-x-0'}
+        md:flex flex-shrink-0
+      `}>
+      <div className="p-5 space-y-8 h-full flex flex-col">
         <div>
-          <h3 className="text-xs font-bold text-indigo-900/50 dark:text-indigo-200/50 uppercase tracking-widest mb-4 px-4">Меню</h3>
+          <div className="flex items-center justify-between mb-4 px-4">
+             <h3 className="text-xs font-bold text-indigo-900/50 dark:text-indigo-200/50 uppercase tracking-widest">Меню</h3>
+             {isOpen && (
+               <button onClick={onClose} className="md:hidden text-slate-400 hover:text-slate-600">
+                 <X size={20} />
+               </button>
+             )}
+          </div>
           <NavItem view="dashboard" icon={LayoutDashboard} label="Обзор" />
           <NavItem view="library" icon={Files} label="Документы" count={documentCount} />
           <NavItem view="analytics" icon={PieChart} label="Аналитика" />
@@ -146,5 +170,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onChangeView }) =>
         )}
       </div>
     </aside>
+    </>
   );
 };

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Bell, Settings, User, Mic, LogOut, CheckCircle, AlertTriangle, X } from 'lucide-react';
+import { Search, Bell, Settings, User, Mic, LogOut, CheckCircle, AlertTriangle, X, Menu } from 'lucide-react';
 import { ViewState } from '../types';
 import { GLASS_STYLES } from '../constants';
 import { documentsService } from '../api/services/documents';
@@ -8,9 +8,10 @@ interface TopbarProps {
   onNavigate: (view: ViewState) => void;
   onLogout: () => void;
   onOpenCommandPalette: () => void;
+  onToggleMobileMenu?: () => void;
 }
 
-export const Topbar: React.FC<TopbarProps> = ({ onNavigate, onLogout, onOpenCommandPalette }) => {
+export const Topbar: React.FC<TopbarProps> = ({ onNavigate, onLogout, onOpenCommandPalette, onToggleMobileMenu }) => {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -86,12 +87,20 @@ export const Topbar: React.FC<TopbarProps> = ({ onNavigate, onLogout, onOpenComm
 
   return (
     <header className={`mx-4 mt-4 mb-0 rounded-2xl flex items-center justify-between px-6 py-2 sticky top-4 z-30 transition-all duration-300 ${GLASS_STYLES.panel} border-white/20`}>
+      {/* Mobile Menu Button */}
+      <button 
+        onClick={onToggleMobileMenu}
+        className="md:hidden p-2 -ml-2 mr-2 text-slate-600 hover:bg-white/40 rounded-xl"
+      >
+        <Menu size={24} />
+      </button>
+
       {/* Logo Area */}
-      <div className="flex items-center gap-3 w-64 cursor-pointer group" onClick={() => onNavigate('dashboard')}>
-        <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-indigo-500/30 group-hover:scale-105 transition-transform">
+      <div className="flex items-center gap-3 w-auto md:w-64 cursor-pointer group" onClick={() => onNavigate('dashboard')}>
+        <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-indigo-500/30 group-hover:scale-105 transition-transform shrink-0">
           S
         </div>
-        <span className="font-bold text-xl tracking-tight text-slate-800">Sirius DMS</span>
+        <span className="font-bold text-xl tracking-tight text-slate-800 hidden sm:block">Sirius DMS</span>
       </div>
 
       {/* Intelligent Search */}
