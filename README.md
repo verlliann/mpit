@@ -43,7 +43,7 @@ npm run dev
 - **React 18** + TypeScript
 - **Vite** (сборщик)
 - **Tailwind CSS** (стили)
-- **FastAPI** (бэкенд, готов к интеграции)
+- **FastAPI** (бэкенд)
 
 ---
 
@@ -72,5 +72,4 @@ npm run type-check   # Проверка TypeScript типов
 
 ---
 
-**License**: MIT  
-**Version**: 1.0.0
+
