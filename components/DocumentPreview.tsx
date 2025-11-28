@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Download, Edit, Trash2, Eye, Calendar, User, FileText, HardDrive, History, Save, RotateCcw, Tag, Plus, Zap, Layers, Share2, CheckCircle, XCircle, Clock, Building, AlignLeft } from 'lucide-react';
+import { X, Download, Edit, Trash2, Eye, Calendar, User, FileText, HardDrive, History, Save, RotateCcw, Tag, Plus, Zap, Layers, Share2, CheckCircle, XCircle, Clock, Building, AlignLeft, Printer, FileType } from 'lucide-react';
 import { Document, DocumentType, DocumentStatus, PriorityLevel, DocumentHistory } from '../types';
 import { DOC_ICONS, STATUS_COLORS, STATUS_LABELS, getTagColor, PRIORITY_LABELS, PRIORITY_STYLES, GLASS_STYLES } from '../constants';
 import { documentsService } from '../api/services/documents';
@@ -208,6 +208,13 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ document, onCl
               <Download size={20} className="group-hover:text-indigo-600 transition-colors" /> <span className="text-[10px] font-medium">Скачать</span>
             </button>
              <button 
+              onClick={() => window.print()} 
+              className={`flex flex-col items-center gap-1 p-2 rounded-xl text-slate-600 transition-all group ${GLASS_STYLES.interactive}`} 
+              title="Печать"
+            >
+              <Printer size={20} className="group-hover:text-indigo-600 transition-colors" /> <span className="text-[10px] font-medium">Печать</span>
+            </button>
+             <button 
               onClick={copyLink} 
               className={`flex flex-col items-center gap-1 p-2 rounded-xl text-slate-600 transition-all group ${GLASS_STYLES.interactive}`} 
               title="Поделиться"
@@ -345,6 +352,27 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ document, onCl
                   )}
                 </div>
               </div>
+
+              {/* Type Edit Field */}
+              {isEditing && (
+                  <div>
+                    <label className="text-xs font-bold text-indigo-900/50 uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <FileType size={14} /> Тип документа
+                    </label>
+                    <select 
+                        value={editedDoc.type}
+                        onChange={(e) => handleChange('type', e.target.value)}
+                        className={`w-full text-sm rounded-xl py-2 ${GLASS_STYLES.input}`}
+                      >
+                        <option value="contract">Договор</option>
+                        <option value="invoice">Счет</option>
+                        <option value="act">Акт</option>
+                        <option value="order">Приказ</option>
+                        <option value="email">Письмо</option>
+                        <option value="scan">Скан</option>
+                      </select>
+                  </div>
+              )}
 
               <div className="h-px bg-gradient-to-r from-transparent via-indigo-900/10 to-transparent"></div>
 

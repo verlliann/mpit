@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { User, Shield, HardDrive, Bell, Key, Database, Globe, Save, Check } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, Shield, HardDrive, Bell, Key, Database, Globe, Save, Check, Moon, Sun } from 'lucide-react';
 import { settingsService } from '../api/services/settings';
 import { storageService } from '../api/services/storage';
 import { useApi, useMutation } from '../hooks/useApi';
@@ -9,6 +9,34 @@ import { GLASS_STYLES } from '../constants';
 export const Settings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'general' | 'storage' | 'security'>('general');
   const { user } = useAuth();
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDenseMode, setIsDenseMode] = useState(false);
+
+  useEffect(() => {
+    // Mock initialization
+    const savedTheme = localStorage.getItem('theme');
+    setIsDarkMode(savedTheme === 'dark');
+    const savedDensity = localStorage.getItem('denseMode');
+    setIsDenseMode(savedDensity === 'true');
+  }, []);
+
+  const toggleTheme = () => {
+    const newMode = !isDarkMode;
+    setIsDarkMode(newMode);
+    localStorage.setItem('theme', newMode ? 'dark' : 'light');
+    // Actual theme switching would happen in a context or layout wrapper
+    if (newMode) {
+        document.documentElement.classList.add('dark');
+    } else {
+        document.documentElement.classList.remove('dark');
+    }
+  };
+
+  const toggleDenseMode = () => {
+      const newMode = !isDenseMode;
+      setIsDenseMode(newMode);
+      localStorage.setItem('denseMode', String(newMode));
+  };
   
   const { data: settings, loading: settingsLoading } = useApi(
     () => settingsService.getSettings(),
@@ -144,13 +172,28 @@ export const Settings: React.FC = () => {
                <div className={`p-8 rounded-3xl ${GLASS_STYLES.card}`}>
                 <h3 className="text-lg font-bold text-slate-800 mb-6">Настройки интерфейса</h3>
                 <div className="flex items-center justify-between py-4 border-b border-indigo-900/5">
-                  <div>
-                    <p className="text-sm font-bold text-slate-800">Тёмная тема</p>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">Переключить интерфейс в темный режим</p>
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-indigo-100 text-indigo-600' : 'bg-amber-100 text-amber-600'}`}>
+                        {isDarkMode ? <Moon size={18} /> : <Sun size={18} />}
+                    </div>
+                    <div>
+                        <p className="text-sm font-bold text-slate-800">Тёмная тема</p>
+                        <p className="text-xs text-slate-500 font-medium mt-0.5">Переключить интерфейс в темный режим</p>
+                    </div>
                   </div>
                   <div className="relative inline-block w-12 h-7 align-middle select-none transition duration-200 ease-in">
-                    <input type="checkbox" name="toggle" id="toggle" className="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer translate-x-1 top-1" checked={false} readOnly />
-                    <label htmlFor="toggle" className="toggle-label block overflow-hidden h-7 rounded-full bg-slate-300 cursor-pointer"></label>
+                    <input 
+                        type="checkbox" 
+                        name="toggle" 
+                        id="toggle" 
+                        className={`toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200 top-1 left-1 ${isDarkMode ? 'translate-x-5' : 'translate-x-0'}`} 
+                        checked={isDarkMode} 
+                        onChange={toggleTheme}
+                    />
+                    <label 
+                        htmlFor="toggle" 
+                        className={`toggle-label block overflow-hidden h-7 rounded-full cursor-pointer transition-colors duration-200 ${isDarkMode ? 'bg-indigo-600' : 'bg-slate-300'}`}
+                    ></label>
                   </div>
                 </div>
                  <div className="flex items-center justify-between py-4">
@@ -159,8 +202,17 @@ export const Settings: React.FC = () => {
                     <p className="text-xs text-slate-500 font-medium mt-0.5">Уменьшить отступы в таблице документов</p>
                   </div>
                    <div className="relative inline-block w-12 h-7 align-middle select-none transition duration-200 ease-in">
-                    <input type="checkbox" className="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer translate-x-6 top-1 shadow-sm" checked readOnly />
-                     <div className="block overflow-hidden h-7 rounded-full bg-indigo-500 cursor-pointer shadow-inner"></div>
+                    <input 
+                        type="checkbox" 
+                        id="toggle-dense"
+                        className={`toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200 top-1 left-1 ${isDenseMode ? 'translate-x-5' : 'translate-x-0'}`} 
+                        checked={isDenseMode} 
+                        onChange={toggleDenseMode}
+                    />
+                     <label 
+                        htmlFor="toggle-dense"
+                        className={`block overflow-hidden h-7 rounded-full cursor-pointer transition-colors duration-200 ${isDenseMode ? 'bg-indigo-600' : 'bg-slate-300'}`}
+                     ></label>
                   </div>
                 </div>
               </div>

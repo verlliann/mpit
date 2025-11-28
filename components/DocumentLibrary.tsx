@@ -15,10 +15,17 @@ interface DocumentLibraryProps {
 
 export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocument, selectedDocumentId, currentView }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const saved = localStorage.getItem('viewMode');
+    return (saved as ViewMode) || 'list';
+  });
   const [searchQuery, setSearchQuery] = useState('');
 
   const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    localStorage.setItem('viewMode', viewMode);
+  }, [viewMode]);
 
   // Build params based on current view
   const params = useMemo(() => {
