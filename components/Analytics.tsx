@@ -8,13 +8,13 @@ import { analyticsService } from '../api/services/analytics';
 import { useApi } from '../hooks/useApi';
 import { GLASS_STYLES } from '../constants';
 
-const MetricCard = ({ title, value, trend, isPositive, icon: Icon, color }: any) => (
+const MetricCard = ({ title, value, trend, isPositive, icon: Icon, color, isLoading }: any) => (
   <div className={`p-6 rounded-2xl transition-all hover:scale-105 ${GLASS_STYLES.card}`}>
     <div className="flex items-start justify-between mb-4">
       <div className={`p-3 rounded-xl ${color} bg-opacity-20 backdrop-blur-sm`}>
         <Icon size={20} />
       </div>
-      {trend && (
+      {trend && !isLoading && (
         <div className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${isPositive ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
           <ArrowUpRight size={12} className={isPositive ? '' : 'rotate-180'} />
           {trend}%
@@ -22,7 +22,9 @@ const MetricCard = ({ title, value, trend, isPositive, icon: Icon, color }: any)
       )}
     </div>
     <div className="text-slate-500 text-sm font-bold uppercase tracking-wider mb-1">{title}</div>
-    <div className="text-3xl font-bold text-slate-800 tracking-tight">{value}</div>
+    <div className="text-3xl font-bold text-slate-800 tracking-tight">
+      {isLoading ? <div className="h-9 w-24 bg-slate-200/50 animate-pulse rounded-lg"/> : value}
+    </div>
   </div>
 );
 
@@ -79,35 +81,39 @@ export const Analytics: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricCard 
           title="Всего документов" 
-          value={metricsLoading ? "..." : (dashboard?.total_documents || 0).toLocaleString()} 
+          value={(dashboard?.total_documents || 0).toLocaleString()} 
           trend={undefined}
           isPositive={true} 
           icon={Layers} 
           color="bg-blue-500 text-blue-600" 
+          isLoading={metricsLoading}
         />
         <MetricCard 
           title="Ср. время обработки" 
-          value={metricsLoading ? "..." : formatTime(dashboard?.avg_processing_time_minutes || 0)} 
+          value={formatTime(dashboard?.avg_processing_time_minutes || 0)} 
           trend={undefined}
           isPositive={true} 
           icon={Clock} 
           color="bg-purple-500 text-purple-600" 
+          isLoading={metricsLoading}
         />
         <MetricCard 
           title="Обработано страниц" 
-          value={metricsLoading ? "..." : (dashboard?.processed_pages || 0).toLocaleString()} 
+          value={(dashboard?.processed_pages || 0).toLocaleString()} 
           trend={undefined}
           isPositive={true} 
           icon={FileCheck} 
           color="bg-emerald-500 text-emerald-600" 
+          isLoading={metricsLoading}
         />
         <MetricCard 
           title="Высокий приоритет" 
-          value={metricsLoading ? "..." : (dashboard?.high_priority_count || 0).toString()} 
+          value={(dashboard?.high_priority_count || 0).toString()} 
           trend={undefined}
           isPositive={true} 
           icon={Users} 
           color="bg-indigo-500 text-indigo-600" 
+          isLoading={metricsLoading}
         />
       </div>
 

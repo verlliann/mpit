@@ -27,6 +27,19 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
     localStorage.setItem('viewMode', viewMode);
   }, [viewMode]);
 
+  const [isDense, setIsDense] = useState(() => {
+    return localStorage.getItem('denseMode') === 'true';
+  });
+
+  useEffect(() => {
+    // Listen for storage changes to update dense mode
+    const handleStorageChange = () => {
+      setIsDense(localStorage.getItem('denseMode') === 'true');
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
   // Build params based on current view
   const params = useMemo(() => {
     const baseParams: any = {
@@ -249,20 +262,20 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
         ) : (
           <>
             {viewMode === 'list' ? (
-              <table className="w-full text-left border-separate border-spacing-y-3">
+              <table className="w-full text-left border-separate border-spacing-y-0 sm:border-spacing-y-3">
                 <thead className="sticky top-0 z-10">
                   <tr>
-                    <th className="w-12 px-4 py-2"></th>
-                    <th className="w-12 px-4 py-2"></th>
-                    <th className="px-4 py-2 text-xs font-bold text-indigo-900/50 uppercase tracking-wider cursor-pointer group">
+                    <th className={`w-12 px-4 py-2 ${isDense ? 'py-1' : 'py-2'}`}></th>
+                    <th className={`w-12 px-4 py-2 ${isDense ? 'py-1' : 'py-2'}`}></th>
+                    <th className={`px-4 text-xs font-bold text-indigo-900/50 uppercase tracking-wider cursor-pointer group ${isDense ? 'py-1' : 'py-2'}`}>
                       <div className="flex items-center gap-1">Название <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-100" /></div>
                     </th>
-                    <th className="px-4 py-2 text-xs font-bold text-indigo-900/50 uppercase tracking-wider">Тип</th>
-                    <th className="px-4 py-2 text-xs font-bold text-indigo-900/50 uppercase tracking-wider">Контрагент</th>
-                    <th className="px-4 py-2 text-xs font-bold text-indigo-900/50 uppercase tracking-wider">Приоритет</th>
-                    <th className="px-4 py-2 text-xs font-bold text-indigo-900/50 uppercase tracking-wider text-center">Дата</th>
-                    <th className="px-4 py-2 text-xs font-bold text-indigo-900/50 uppercase tracking-wider">Статус</th>
-                    <th className="px-4 py-2"></th>
+                    <th className={`px-4 text-xs font-bold text-indigo-900/50 uppercase tracking-wider ${isDense ? 'py-1' : 'py-2'}`}>Тип</th>
+                    <th className={`px-4 text-xs font-bold text-indigo-900/50 uppercase tracking-wider ${isDense ? 'py-1' : 'py-2'}`}>Контрагент</th>
+                    <th className={`px-4 text-xs font-bold text-indigo-900/50 uppercase tracking-wider ${isDense ? 'py-1' : 'py-2'}`}>Приоритет</th>
+                    <th className={`px-4 text-xs font-bold text-indigo-900/50 uppercase tracking-wider text-center ${isDense ? 'py-1' : 'py-2'}`}>Дата</th>
+                    <th className={`px-4 text-xs font-bold text-indigo-900/50 uppercase tracking-wider ${isDense ? 'py-1' : 'py-2'}`}>Статус</th>
+                    <th className={`px-4 ${isDense ? 'py-1' : 'py-2'}`}></th>
                   </tr>
                 </thead>
                 <tbody className="text-slate-700">
@@ -276,10 +289,10 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
                     return (
                       <tr 
                         key={doc.id} 
-                        className={`group transition-all duration-200 cursor-pointer hover:scale-[1.01] ${isActive ? 'bg-indigo-50/60 shadow-md ring-1 ring-indigo-200' : 'bg-white/40 hover:bg-white/60 shadow-sm hover:shadow-md'} ${isSelected ? 'bg-indigo-50/40' : ''} rounded-xl backdrop-blur-sm`}
+                        className={`group transition-all duration-200 cursor-pointer hover:scale-[1.01] ${isActive ? 'bg-indigo-50/60 shadow-md ring-1 ring-indigo-200' : 'bg-white/40 hover:bg-white/60 shadow-sm hover:shadow-md'} ${isSelected ? 'bg-indigo-50/40' : ''} rounded-xl backdrop-blur-sm ${isDense ? 'text-xs' : ''}`}
                         onClick={() => onSelectDocument(doc)}
                       >
-                        <td className="px-4 py-4 rounded-l-xl" onClick={(e) => { e.stopPropagation(); toggleSelection(doc.id); }}>
+                        <td className={`px-4 rounded-l-xl ${isDense ? 'py-2' : 'py-4'}`} onClick={(e) => { e.stopPropagation(); toggleSelection(doc.id); }}>
                            <input 
                              type="checkbox" 
                              checked={isSelected}
@@ -287,47 +300,49 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
                              className="rounded border-indigo-200 text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer bg-white/50" 
                            />
                         </td>
-                        <td className="px-4 py-4 text-slate-500">
-                          <div className="p-2 bg-white/60 rounded-lg shadow-sm">
-                             <IconComp size={20} strokeWidth={1.5} className="text-indigo-600" />
+                        <td className={`px-4 text-slate-500 ${isDense ? 'py-2' : 'py-4'}`}>
+                          <div className={`bg-white/60 rounded-lg shadow-sm flex items-center justify-center ${isDense ? 'p-1.5 w-8 h-8' : 'p-2'}`}>
+                             <IconComp size={isDense ? 16 : 20} strokeWidth={1.5} className="text-indigo-600" />
                           </div>
                         </td>
-                        <td className="px-4 py-4">
+                        <td className={`px-4 ${isDense ? 'py-2' : 'py-4'}`}>
                           <div className="flex flex-col gap-1">
                              <div className="flex items-center gap-2">
-                                <span className="font-bold text-slate-800 text-sm leading-none">{doc.title}</span>
+                                <span className={`font-bold text-slate-800 leading-none ${isDense ? 'text-xs' : 'text-sm'}`}>{doc.title}</span>
                                 {doc.isFavorite && <Star size={12} className="text-amber-400 fill-amber-400" />}
                              </div>
-                             <div className="flex items-center gap-2">
-                               <span className="text-xs text-slate-500">{doc.size}</span>
-                               {doc.tags && doc.tags.map(tag => (
-                                  <span key={tag} className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${getTagColor(tag)} bg-opacity-50`}>
-                                    {tag}
-                                  </span>
-                               ))}
-                             </div>
+                             {!isDense && (
+                               <div className="flex items-center gap-2">
+                                 <span className="text-xs text-slate-500">{doc.size}</span>
+                                 {doc.tags && doc.tags.map(tag => (
+                                    <span key={tag} className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${getTagColor(tag)} bg-opacity-50`}>
+                                      {tag}
+                                    </span>
+                                 ))}
+                               </div>
+                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-4 text-sm text-slate-600 capitalize font-medium">
+                        <td className={`px-4 text-slate-600 capitalize font-medium ${isDense ? 'py-2 text-xs' : 'py-4 text-sm'}`}>
                           {doc.type}
                         </td>
-                        <td className="px-4 py-4 text-sm text-slate-600 font-medium">
+                        <td className={`px-4 text-slate-600 font-medium ${isDense ? 'py-2 text-xs' : 'py-4 text-sm'}`}>
                           {doc.counterparty || '—'}
                         </td>
-                        <td className="px-4 py-4 text-sm">
-                           <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border uppercase tracking-wide ${priorityStyle}`}>
+                        <td className={`px-4 ${isDense ? 'py-2' : 'py-4'}`}>
+                           <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border uppercase tracking-wide ${priorityStyle} ${isDense ? 'scale-90 origin-left' : ''}`}>
                               {priorityLabel}
                            </span>
                         </td>
-                        <td className="px-4 py-4 text-sm text-slate-600 text-center font-mono opacity-80">
+                        <td className={`px-4 text-slate-600 text-center font-mono opacity-80 ${isDense ? 'py-2 text-xs' : 'py-4 text-sm'}`}>
                           {new Date(doc.date).toLocaleDateString()}
                         </td>
-                        <td className="px-4 py-4">
-                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border shadow-sm ${STATUS_COLORS[doc.status]}`}>
+                        <td className={`px-4 ${isDense ? 'py-2' : 'py-4'}`}>
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border shadow-sm ${STATUS_COLORS[doc.status]} ${isDense ? 'scale-90' : ''}`}>
                             {STATUS_LABELS[doc.status]}
                           </span>
                         </td>
-                        <td className="px-4 py-4 text-right relative rounded-r-xl">
+                        <td className={`px-4 text-right relative rounded-r-xl ${isDense ? 'py-2' : 'py-4'}`}>
                           <button className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-white/50 opacity-0 group-hover:opacity-100 transition-all">
                             <MoreVertical size={16} />
                           </button>
@@ -336,7 +351,7 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
                     );
                   })}
                   {/* Visual padding rows */}
-                   {documents.length > 0 && Array.from({ length: Math.max(0, 5 - documents.length) }).map((_, i) => (
+                   {documents.length > 0 && !isDense && Array.from({ length: Math.max(0, 5 - documents.length) }).map((_, i) => (
                       <tr key={`empty-${i}`} className="h-16">
                          <td colSpan={9} className="border-b border-transparent"></td>
                       </tr>

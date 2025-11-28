@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, FileText, ArrowRight, LayoutDashboard, Files, Users, PieChart, Settings, Command } from 'lucide-react';
+import { Search, FileText, ArrowRight, LayoutDashboard, Files, Users, PieChart, Settings, Command, Moon, Sun, Upload, Plus } from 'lucide-react';
 import { MOCK_DOCUMENTS, GLASS_STYLES } from '../constants';
 import { ViewState } from '../types';
 
@@ -26,14 +26,28 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
   if (!isOpen) return null;
 
   const navigationItems = [
-    { label: 'Перейти в Дашборд', view: 'dashboard' as ViewState, icon: LayoutDashboard },
-    { label: 'Все документы', view: 'library' as ViewState, icon: Files },
-    { label: 'Аналитика', view: 'analytics' as ViewState, icon: PieChart },
-    { label: 'Контрагенты', view: 'counterparties' as ViewState, icon: Users },
-    { label: 'Настройки', view: 'settings' as ViewState, icon: Settings },
+    { label: 'Перейти в Дашборд', view: 'dashboard' as ViewState, icon: LayoutDashboard, type: 'nav' },
+    { label: 'Все документы', view: 'library' as ViewState, icon: Files, type: 'nav' },
+    { label: 'Аналитика', view: 'analytics' as ViewState, icon: PieChart, type: 'nav' },
+    { label: 'Контрагенты', view: 'counterparties' as ViewState, icon: Users, type: 'nav' },
+    { label: 'Настройки', view: 'settings' as ViewState, icon: Settings, type: 'nav' },
+  ];
+
+  const actionItems = [
+    { label: 'Загрузить документ', action: () => onNavigate('upload'), icon: Upload, type: 'action' },
+    { label: 'Добавить контрагента', action: () => onNavigate('counterparties'), icon: Plus, type: 'action' },
+    { label: 'Переключить тему', action: () => { 
+        const isDark = document.documentElement.classList.toggle('dark');
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
+        onClose();
+    }, icon: Moon, type: 'action' },
   ];
 
   const filteredNav = navigationItems.filter(item => 
+    item.label.toLowerCase().includes(query.toLowerCase())
+  );
+
+  const filteredActions = actionItems.filter(item => 
     item.label.toLowerCase().includes(query.toLowerCase())
   );
 
@@ -42,7 +56,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
     doc.counterparty.toLowerCase().includes(query.toLowerCase())
   ).slice(0, 5);
 
-  const allItems = [...filteredNav, ...filteredDocs];
+  const allItems = [...filteredNav, ...filteredActions, ...filteredDocs];
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
@@ -57,6 +71,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
       if (selected) {
         if ('view' in selected) {
           onNavigate(selected.view as ViewState);
+        } else if ('action' in selected) {
+            // @ts-ignore
+            selected.action();
         } else {
           // Navigate to library and select logic would go here, 
           // for now just go to library
@@ -109,7 +126,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
                     return (
                       <div
                         key={item.label}
-                        onClick={() => { onNavigate(item.view); onClose(); }}
+                        onClick={() => { onNavigate(item.view as ViewState); onClose(); }}
                         className={`px-4 py-3 mx-2 rounded-xl cursor-pointer flex items-center justify-between transition-all duration-200 ${isActive ? 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-lg shadow-indigo-500/30' : 'text-slate-700 hover:bg-white/50'}`}
                       >
                         <div className="flex items-center gap-3">
@@ -123,11 +140,38 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
                 </div>
               )}
 
+              {filteredActions.length > 0 && (
+                <div className="mb-2">
+                  <div className="px-5 py-2 text-xs font-bold text-slate-400 uppercase tracking-widest">Действия</div>
+                  {filteredActions.map((item, idx) => {
+                    const globalIdx = filteredNav.length + idx;
+                    const isActive = globalIdx === selectedIndex;
+                    return (
+                      <div
+                        key={item.label}
+                        onClick={() => { 
+                            // @ts-ignore
+                            item.action(); 
+                            onClose(); 
+                        }}
+                        className={`px-4 py-3 mx-2 rounded-xl cursor-pointer flex items-center justify-between transition-all duration-200 ${isActive ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-500/30' : 'text-slate-700 hover:bg-white/50'}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <item.icon size={20} className={isActive ? 'text-white' : 'text-emerald-600'} />
+                          <span className="font-bold">{item.label}</span>
+                        </div>
+                        {isActive && <span className="text-xs bg-white/20 px-2 py-1 rounded-lg text-white font-bold">Enter</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               {filteredDocs.length > 0 && (
                 <div>
                   <div className="px-5 py-2 text-xs font-bold text-slate-400 uppercase tracking-widest">Документы</div>
                   {filteredDocs.map((doc, idx) => {
-                    const globalIdx = filteredNav.length + idx;
+                    const globalIdx = filteredNav.length + filteredActions.length + idx;
                     const isActive = globalIdx === selectedIndex;
                     return (
                       <div
