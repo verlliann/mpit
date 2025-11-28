@@ -199,10 +199,6 @@ export interface PaginationParams {
   limit?: number;
 }
 
-export interface ApiError {
-  message: string;
-  detail?: any;
-  status: number;
-}
+// ApiError is exported from './client' as a class, not an interface
 
 

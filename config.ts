@@ -1,6 +1,24 @@
 // API Configuration
+// In production (Docker), use relative paths so nginx can proxy to backend
+// In development, use explicit localhost URL
+const getBaseURL = () => {
+  // If VITE_API_URL is explicitly set, use it
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  
+  // In production mode (Docker), use empty string for relative paths
+  // Nginx will proxy /api/* requests to backend:8000
+  if (import.meta.env.MODE === 'production' || import.meta.env.PROD) {
+    return '';
+  }
+  
+  // In development, use localhost
+  return 'http://localhost:8000';
+};
+
 export const API_CONFIG = {
-  BASE_URL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  BASE_URL: getBaseURL(),
   TIMEOUT: 30000, // 30 seconds
   HEADERS: {
     'Content-Type': 'application/json',

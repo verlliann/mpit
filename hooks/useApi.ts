@@ -72,11 +72,11 @@ export function useApi<T, Args extends any[] = []>(
 /**
  * Hook for paginated API calls
  */
-export function usePaginatedApi<T>(
-  apiFunction: (params: any) => Promise<{ items: T[]; total: number; pages: number }>,
-  initialParams: any = {}
+export function usePaginatedApi<T, P extends { page?: number } = { page?: number }>(
+  apiFunction: (params: P) => Promise<{ items: T[]; total: number; pages: number }>,
+  initialParams: P = {} as P
 ) {
-  const [params, setParams] = useState(initialParams);
+  const [params, setParams] = useState<P>(initialParams);
   const [allData, setAllData] = useState<T[]>([]);
 
   const { data, loading, error, execute } = useApi(apiFunction, {
@@ -90,13 +90,13 @@ export function usePaginatedApi<T>(
   });
 
   const loadMore = useCallback(() => {
-    if (data && params.page < data.pages) {
-      setParams(prev => ({ ...prev, page: prev.page + 1 }));
+    if (data && params.page && params.page < data.pages) {
+      setParams((prev: P) => ({ ...prev, page: (prev.page || 1) + 1 } as P));
     }
   }, [data, params.page]);
 
   const refresh = useCallback(() => {
-    setParams(prev => ({ ...prev, page: 1 }));
+    setParams((prev: P) => ({ ...prev, page: 1 } as P));
     setAllData([]);
   }, []);
 
@@ -114,7 +114,7 @@ export function usePaginatedApi<T>(
     loadMore,
     refresh,
     setParams,
-    hasMore: data ? params.page < data.pages : false,
+    hasMore: data ? (params.page || 1) < data.pages : false,
   };
 }
 

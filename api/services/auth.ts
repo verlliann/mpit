@@ -31,6 +31,7 @@ export const authService = {
       
       const mockResponse: LoginResponse = {
         access_token: mockToken,
+        refresh_token: 'mock-refresh-token-' + Date.now(),
         token_type: 'Bearer',
         user: MOCK_USER
       };

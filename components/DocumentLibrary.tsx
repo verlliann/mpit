@@ -1,8 +1,9 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { MoreVertical, ArrowUpDown, Star, Archive, Trash2, Grid, List, Filter, FileText, Layers } from 'lucide-react';
-import { MOCK_DOCUMENTS, DOC_ICONS, STATUS_COLORS, STATUS_LABELS, getTagColor, PRIORITY_STYLES, PRIORITY_LABELS } from '../constants';
+import { DOC_ICONS, STATUS_COLORS, STATUS_LABELS, getTagColor, PRIORITY_STYLES, PRIORITY_LABELS } from '../constants';
 import { Document, DocumentType, ViewState, ViewMode } from '../types';
+import { useDocuments, useDocumentMutations } from '../hooks/useDocuments';
 
 interface DocumentLibraryProps {
   onSelectDocument: (doc: Document | null) => void;
@@ -13,18 +14,47 @@ interface DocumentLibraryProps {
 export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocument, selectedDocumentId, currentView }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Filter documents based on view
-  const documents = useMemo(() => {
-    return MOCK_DOCUMENTS.filter(doc => {
-      if (currentView === 'favorites') return doc.isFavorite && !doc.isDeleted;
-      if (currentView === 'archive') return doc.isArchived && !doc.isDeleted;
-      if (currentView === 'trash') return doc.isDeleted;
-      
-      // Default library view: show active, non-archived, non-deleted
-      return !doc.isDeleted && !doc.isArchived;
-    });
-  }, [currentView]);
+  // Build params based on current view
+  const params = useMemo(() => {
+    const baseParams: any = {
+      page: 1,
+      limit: 100,
+    };
+    
+    if (currentView === 'favorites') {
+      baseParams.is_favorite = true;
+      baseParams.is_deleted = false;
+    } else if (currentView === 'archive') {
+      baseParams.is_archived = true;
+      baseParams.is_deleted = false;
+    } else if (currentView === 'trash') {
+      baseParams.is_deleted = true;
+    } else {
+      baseParams.is_deleted = false;
+      baseParams.is_archived = false;
+    }
+    
+    if (searchQuery) {
+      baseParams.search = searchQuery;
+    }
+    
+    return baseParams;
+  }, [currentView, searchQuery]);
+
+  const [refreshKey, setRefreshKey] = useState(0);
+  const paramsWithRefresh = useMemo(() => ({ ...params, _refresh: refreshKey }), [params, refreshKey]);
+  
+  const { data: documentsData, loading, error } = useDocuments(paramsWithRefresh);
+  const { bulkDelete, bulkArchive, toggleFavorite, isLoading: mutationsLoading } = useDocumentMutations({
+    onSuccess: () => {
+      setRefreshKey(prev => prev + 1);
+      setSelectedIds(new Set());
+    }
+  });
+
+  const documents = documentsData?.items || [];
 
   const toggleSelection = (id: string) => {
     const newSet = new Set(selectedIds);
@@ -39,6 +69,18 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
     } else {
       setSelectedIds(new Set(documents.map(d => d.id)));
     }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (confirm(`Удалить ${selectedIds.size} документ(ов)?`)) {
+      await bulkDelete(Array.from(selectedIds));
+    }
+  };
+
+  const handleBulkArchive = async () => {
+    if (selectedIds.size === 0) return;
+    await bulkArchive(Array.from(selectedIds));
   };
 
   const getPageTitle = () => {
@@ -73,9 +115,19 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
              <div className="flex items-center gap-2 animate-in fade-in duration-200 ml-2">
                <button className="px-3 py-1.5 bg-white border border-slate-200 shadow-sm rounded-lg text-sm text-slate-700 hover:bg-slate-50 font-medium transition-colors">Скачать</button>
                {currentView !== 'trash' && (
-                  <button className="px-3 py-1.5 bg-white border border-slate-200 shadow-sm rounded-lg text-sm text-slate-700 hover:bg-slate-50 font-medium transition-colors">В архив</button>
+                  <button 
+                    onClick={handleBulkArchive}
+                    disabled={mutationsLoading}
+                    className="px-3 py-1.5 bg-white border border-slate-200 shadow-sm rounded-lg text-sm text-slate-700 hover:bg-slate-50 font-medium transition-colors disabled:opacity-50"
+                  >
+                    В архив
+                  </button>
                )}
-               <button className="px-3 py-1.5 bg-white border border-slate-200 shadow-sm rounded-lg text-sm hover:bg-red-50 text-red-600 hover:text-red-700 hover:border-red-200 font-medium transition-colors">
+               <button 
+                 onClick={handleBulkDelete}
+                 disabled={mutationsLoading}
+                 className="px-3 py-1.5 bg-white border border-slate-200 shadow-sm rounded-lg text-sm hover:bg-red-50 text-red-600 hover:text-red-700 hover:border-red-200 font-medium transition-colors disabled:opacity-50"
+               >
                   {currentView === 'trash' ? 'Удалить навсегда' : 'Удалить'}
                </button>
              </div>
@@ -97,6 +149,13 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
                <Grid size={16} />
              </button>
            </div>
+           <input
+             type="text"
+             placeholder="Поиск..."
+             value={searchQuery}
+             onChange={(e) => setSearchQuery(e.target.value)}
+             className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-primary focus:border-primary"
+           />
            <button className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors border border-transparent hover:border-slate-200">
              <Filter size={18} />
            </button>
@@ -111,7 +170,22 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
 
       {/* Content Area */}
       <div className="flex-1 overflow-auto bg-slate-50/50">
-        {documents.length === 0 ? (
+        {loading ? (
+          <div className="h-full flex flex-col items-center justify-center text-slate-400 pb-20">
+            <div className="p-6 bg-white border border-slate-100 shadow-sm rounded-full mb-4 animate-pulse">
+              <FileText size={40} className="text-slate-300" />
+            </div>
+            <p className="text-lg font-medium text-slate-600">Загрузка документов...</p>
+          </div>
+        ) : error ? (
+          <div className="h-full flex flex-col items-center justify-center text-red-400 pb-20">
+            <div className="p-6 bg-white border border-red-100 shadow-sm rounded-full mb-4">
+              <FileText size={40} className="text-red-300" />
+            </div>
+            <p className="text-lg font-medium text-red-600">Ошибка загрузки</p>
+            <p className="text-sm text-red-400 mt-1">{error}</p>
+          </div>
+        ) : documents.length === 0 ? (
            <div className="h-full flex flex-col items-center justify-center text-slate-400 pb-20">
                <div className="p-6 bg-white border border-slate-100 shadow-sm rounded-full mb-4">
                  {currentView === 'favorites' ? <Star size={40} className="text-slate-300" /> : currentView === 'trash' ? <Trash2 size={40} className="text-slate-300" /> : <Archive size={40} className="text-slate-300" />}
@@ -183,7 +257,7 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
                           {doc.type}
                         </td>
                         <td className="px-4 py-3.5 text-sm text-slate-600">
-                          {doc.counterparty}
+                          {doc.counterparty || '—'}
                         </td>
                         <td className="px-4 py-3.5 text-sm">
                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border ${priorityStyle}`}>
@@ -247,7 +321,7 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
                         <h3 className="font-semibold text-slate-800 text-sm mb-1 line-clamp-2 leading-snug" title={doc.title}>
                           {doc.title}
                         </h3>
-                        <p className="text-xs text-slate-500 mb-3">{doc.counterparty}</p>
+                        <p className="text-xs text-slate-500 mb-3">{doc.counterparty || '—'}</p>
                         
                         <div className="mt-auto flex items-center justify-between">
                            <span className={`text-[10px] font-medium px-2 py-0.5 rounded border ${priorityStyle}`}>
@@ -259,8 +333,8 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
 
                       {/* Grid Item Footer */}
                       <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
-                         <span className="flex items-center gap-1"><FileText size={10} /> {doc.pages} стр.</span>
-                         <span>{doc.size}</span>
+                         <span className="flex items-center gap-1"><FileText size={10} /> {doc.pages || 0} стр.</span>
+                         <span>{doc.size || '—'}</span>
                       </div>
                     </div>
                   );
@@ -272,13 +346,23 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
       </div>
       
       {/* Pagination Footer */}
-      {documents.length > 0 && (
+      {documents.length > 0 && documentsData && (
         <div className="border-t border-slate-200 px-6 py-4 flex items-center justify-between bg-white text-sm text-slate-500 shrink-0">
-          <div>Показано 1-{documents.length} из {documents.length}</div>
+          <div>Показано 1-{documents.length} из {documentsData.total}</div>
           <div className="flex items-center gap-2">
-            <button className="px-3 py-1 border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-50 transition-colors" disabled>Пред</button>
-            <div className="px-2 font-medium text-slate-700">1</div>
-            <button className="px-3 py-1 border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-50 transition-colors" disabled>След</button>
+            <button 
+              className="px-3 py-1 border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-50 transition-colors" 
+              disabled={documentsData.page <= 1}
+            >
+              Пред
+            </button>
+            <div className="px-2 font-medium text-slate-700">{documentsData.page} / {documentsData.pages}</div>
+            <button 
+              className="px-3 py-1 border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-50 transition-colors" 
+              disabled={documentsData.page >= documentsData.pages}
+            >
+              След
+            </button>
           </div>
         </div>
       )}

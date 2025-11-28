@@ -55,6 +55,25 @@ class HttpClient {
   }
 
   private buildUrl(endpoint: string, params?: Record<string, any>): string {
+    // If baseURL is empty (relative paths), just use the endpoint
+    if (!this.baseURL) {
+      let url = endpoint;
+      if (params) {
+        const searchParams = new URLSearchParams();
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            searchParams.append(key, String(value));
+          }
+        });
+        const queryString = searchParams.toString();
+        if (queryString) {
+          url += (url.includes('?') ? '&' : '?') + queryString;
+        }
+      }
+      return url;
+    }
+    
+    // Use absolute URL with baseURL
     const url = new URL(endpoint, this.baseURL);
     
     if (params) {

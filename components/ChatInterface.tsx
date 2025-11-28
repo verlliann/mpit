@@ -1,8 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, Loader2 } from 'lucide-react';
-import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
-import { MOCK_DOCUMENTS } from '../constants';
+import { chatService } from '../api/services/chat';
 
 interface Message {
   id: string;
@@ -43,53 +42,11 @@ export const ChatInterface: React.FC = () => {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const messageText = inputValue;
     setInputValue('');
     setIsLoading(true);
 
     try {
-      const apiKey = process.env.API_KEY;
-      
-      let ai;
-      try {
-          ai = new GoogleGenAI({ apiKey: apiKey || 'dummy-key-to-prevent-crash-if-missing' });
-      } catch (e) {
-          console.error("Failed to init AI", e);
-      }
-
-      const systemInstruction = `
-You are the AI assistant for Sirius DMS (Document Management System).
-Your goal is to help users manage, search, and analyze their documents.
-
-CONTEXT:
-Here is the current database of documents in JSON format:
-${JSON.stringify(MOCK_DOCUMENTS)}
-
-CAPABILITIES:
-1. SEARCH: Find documents by name, type, date, priority, or counterparty.
-2. ANALYTICS: Count documents by type, status, or priority.
-3. SUMMARIZATION: Summarize workflow status (e.g., "You have 3 high priority items pending").
-
-RULES:
-- Be concise, professional, and helpful.
-- Dates are in YYYY-MM-DD format in data, but speak naturally (e.g. "15th of January").
-- Focus on operational metrics: Priority (High/Medium/Low), Page Counts, Departments.
-- Do NOT hallucinate financial data (amounts, prices) as they have been removed from the system.
-- If asked to list documents, provide bullet points with Title, Date, and Priority.
-`;
-
-      if (ai && apiKey) {
-          const chat = ai.chats.create({
-            model: 'gemini-2.5-flash',
-            config: { systemInstruction },
-            history: messages.filter(m => m.id !== 'welcome').map(m => ({
-              role: m.role,
-              parts: [{ text: m.text }]
-            }))
-          });
-
-          const result = await chat.sendMessageStream({ message: userMessage.text });
-          
-          let fullResponse = "";
           const modelMessageId = (Date.now() + 1).toString();
           
           // Add placeholder message
@@ -100,35 +57,37 @@ RULES:
               timestamp: new Date()
           }]);
 
-          for await (const chunk of result) {
-            const c = chunk as GenerateContentResponse;
-            const text = c.text;
-            if (text) {
-                fullResponse += text;
-                setMessages(prev => prev.map(msg => 
-                  msg.id === modelMessageId ? { ...msg, text: fullResponse } : msg
-                ));
+      // Use streaming API
+      await chatService.streamMessage(
+        messageText,
+        (chunk: string) => {
+          setMessages(prev => prev.map(msg => {
+            if (msg.id === modelMessageId) {
+              return { ...msg, text: (msg.text || '') + chunk };
             }
-          }
-      } else {
-          // Fallback if no API key is present in environment (for demo purposes)
-          await new Promise(r => setTimeout(r, 1000));
-          setMessages(prev => [...prev, {
-            id: Date.now().toString(),
-            role: 'model',
-            text: "Для работы чата требуется API ключ Gemini. Пожалуйста, убедитесь, что переменная окружения API_KEY установлена.",
-            timestamp: new Date()
-          }]);
+            return msg;
+          }));
       }
+      );
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Chat error:", error);
-      setMessages(prev => [...prev, {
+      setMessages(prev => {
+        const lastMessage = prev[prev.length - 1];
+        if (lastMessage && lastMessage.role === 'model' && lastMessage.text === '') {
+          return prev.map(msg => 
+            msg.id === lastMessage.id 
+              ? { ...msg, text: error.message || "Извините, произошла ошибка при обработке вашего запроса." }
+              : msg
+          );
+        }
+        return [...prev, {
         id: Date.now().toString(),
         role: 'model',
-        text: "Извините, произошла ошибка при обработке вашего запроса.",
+          text: error.message || "Извините, произошла ошибка при обработке вашего запроса.",
         timestamp: new Date()
-      }]);
+        }];
+      });
     } finally {
       setIsLoading(false);
     }

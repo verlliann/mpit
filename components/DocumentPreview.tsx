@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { X, Download, Edit, Trash2, Eye, Calendar, User, FileText, HardDrive, History, Save, RotateCcw, Tag, Plus, Zap, Layers, Share2, CheckCircle, XCircle, Clock, Building, AlignLeft } from 'lucide-react';
 import { Document, DocumentType, DocumentStatus, PriorityLevel, DocumentHistory } from '../types';
 import { DOC_ICONS, STATUS_COLORS, STATUS_LABELS, getTagColor, PRIORITY_LABELS, PRIORITY_STYLES } from '../constants';
+import { documentsService } from '../api/services/documents';
+import { useMutation } from '../hooks/useApi';
 
 interface DocumentPreviewProps {
   document: Document | null;
@@ -17,6 +19,18 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ document, onCl
   const [newTag, setNewTag] = useState('');
   const [isAddingTag, setIsAddingTag] = useState(false);
 
+  const updateMutation = useMutation(
+    ({ id, data }: { id: string; data: any }) => documentsService.updateDocument(id, data),
+    {
+      onSuccess: (updatedDoc) => {
+        if (onUpdate) {
+          onUpdate(updatedDoc);
+        }
+        setIsEditing(false);
+      }
+    }
+  );
+
   useEffect(() => {
     setEditedDoc(document);
     setIsEditing(false);
@@ -29,41 +43,31 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ document, onCl
 
   const IconComp = DOC_ICONS[document.type as DocumentType] || DOC_ICONS.contract;
 
-  const handleSave = () => {
-    if (onUpdate && editedDoc) {
-      // Add 'edit' entry to history if saving
-      const newHistory: DocumentHistory = {
-        id: Date.now().toString(),
-        date: new Date().toISOString(),
-        user: 'Текущий Пользователь',
-        action: 'Изменение метаданных',
-        type: 'info'
-      };
-      const docToSave = { 
-        ...editedDoc, 
-        history: [newHistory, ...(editedDoc.history || [])] 
-      };
-      onUpdate(docToSave);
-    }
+  const handleSave = async () => {
+    if (!editedDoc || !document) return;
+    
+    const updateData: any = {};
+    if (editedDoc.title !== document.title) updateData.title = editedDoc.title;
+    if (editedDoc.description !== document.description) updateData.description = editedDoc.description;
+    if (editedDoc.priority !== document.priority) updateData.priority = editedDoc.priority;
+    if (editedDoc.status !== document.status) updateData.status = editedDoc.status;
+    if (editedDoc.tags !== document.tags) updateData.tags = editedDoc.tags;
+    if (editedDoc.isFavorite !== document.isFavorite) updateData.is_favorite = editedDoc.isFavorite;
+    
+    if (Object.keys(updateData).length > 0) {
+      await updateMutation.mutate({ id: document.id, data: updateData });
+    } else {
     setIsEditing(false);
+    }
   };
 
-  const handleWorkflowAction = (action: 'approve' | 'reject') => {
-    if (!onUpdate) return;
+  const handleWorkflowAction = async (action: 'approve' | 'reject') => {
+    if (!document) return;
     
     const newStatus = action === 'approve' ? 'processed' : 'error';
-    const historyItem: DocumentHistory = {
-      id: Date.now().toString(),
-      date: new Date().toISOString(),
-      user: 'Текущий Пользователь',
-      action: action === 'approve' ? 'Документ согласован' : 'Документ отклонен',
-      type: action === 'approve' ? 'success' : 'danger'
-    };
-
-    onUpdate({
-      ...editedDoc!,
-      status: newStatus,
-      history: [historyItem, ...(editedDoc!.history || [])]
+    await updateMutation.mutate({ 
+      id: document.id, 
+      data: { status: newStatus } 
     });
   };
 

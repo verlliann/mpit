@@ -1,8 +1,60 @@
 import React, { useState } from 'react';
 import { User, Shield, HardDrive, Bell, Key, Database, Globe, Save } from 'lucide-react';
+import { settingsService } from '../api/services/settings';
+import { storageService } from '../api/services/storage';
+import { useApi, useMutation } from '../hooks/useApi';
+import { useAuth } from '../hooks/useAuth';
 
 export const Settings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'general' | 'storage' | 'security'>('general');
+  const { user } = useAuth();
+  
+  const { data: settings, loading: settingsLoading } = useApi(
+    () => settingsService.getSettings(),
+    { immediate: true }
+  );
+  
+  const { data: storageInfo, loading: storageLoading } = useApi(
+    () => storageService.getStorageInfo(),
+    { immediate: true }
+  );
+  
+  const { data: storageStats } = useApi(
+    () => storageService.getStorageStats(),
+    { immediate: true }
+  );
+
+  const updateSettingsMutation = useMutation(
+    (data: any) => settingsService.updateSettings(data),
+    {
+      onSuccess: () => {
+        alert('Настройки сохранены');
+      }
+    }
+  );
+
+  const updateProfileMutation = useMutation(
+    (data: any) => settingsService.updateProfile(data),
+    {
+      onSuccess: () => {
+        alert('Профиль обновлен');
+      }
+    }
+  );
+
+  const changePasswordMutation = useMutation(
+    (data: any) => settingsService.changePassword(data),
+    {
+      onSuccess: () => {
+        alert('Пароль изменен');
+      }
+    }
+  );
+
+  const formatStorage = (gb: number) => {
+    if (gb >= 1000) return `${(gb / 1000).toFixed(1)} TB`;
+    return `${gb.toFixed(1)} GB`;
+  };
 
   const TabButton = ({ id, icon: Icon, label }: { id: typeof activeTab, icon: any, label: string }) => (
     <button 
@@ -61,15 +113,27 @@ export const Settings: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Имя</label>
-                    <input type="text" defaultValue="Алексей" className="w-full rounded-lg border-slate-200 text-sm focus:ring-primary focus:border-primary" />
+                    <input 
+                      type="text" 
+                      defaultValue={user?.first_name || ''} 
+                      className="w-full rounded-lg border-slate-200 text-sm focus:ring-primary focus:border-primary" 
+                    />
                   </div>
                    <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Фамилия</label>
-                    <input type="text" defaultValue="Алексеев" className="w-full rounded-lg border-slate-200 text-sm focus:ring-primary focus:border-primary" />
+                    <input 
+                      type="text" 
+                      defaultValue={user?.last_name || ''} 
+                      className="w-full rounded-lg border-slate-200 text-sm focus:ring-primary focus:border-primary" 
+                    />
                   </div>
                    <div className="col-span-2">
                     <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-                    <input type="email" defaultValue="alex@sirius-dms.com" className="w-full rounded-lg border-slate-200 text-sm focus:ring-primary focus:border-primary" />
+                    <input 
+                      type="email" 
+                      defaultValue={user?.email || ''} 
+                      className="w-full rounded-lg border-slate-200 text-sm focus:ring-primary focus:border-primary" 
+                    />
                   </div>
                 </div>
               </div>
@@ -109,48 +173,58 @@ export const Settings: React.FC = () => {
                  </h3>
                  
                  <div className="mb-8">
+                   {storageLoading ? (
+                     <div className="text-center text-slate-400 py-4">Загрузка данных хранилища...</div>
+                   ) : storageInfo ? (
+                     <>
                    <div className="flex justify-between text-sm mb-2">
                      <span className="font-medium text-slate-700">Всего использовано</span>
-                     <span className="font-bold text-slate-900">247.3 GB / 1 TB</span>
+                         <span className="font-bold text-slate-900">
+                           {formatStorage(storageInfo.used_gb)} / {formatStorage(storageInfo.total_gb)}
+                         </span>
                    </div>
                    <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
-                     <div className="bg-primary h-3 rounded-full" style={{ width: '24.7%' }}></div>
+                         <div 
+                           className="bg-primary h-3 rounded-full" 
+                           style={{ width: `${storageInfo.usage_percentage}%` }}
+                         ></div>
                    </div>
-                   <p className="text-xs text-slate-400 mt-2">Amazon S3 • eu-central-1 • sirius-docs-bucket</p>
+                       <p className="text-xs text-slate-400 mt-2">
+                         {storageInfo.region} • {storageInfo.bucket_name}
+                       </p>
+                     </>
+                   ) : (
+                     <div className="text-center text-slate-400 py-4">Нет данных</div>
+                   )}
                  </div>
 
                  <div className="space-y-4">
                    <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">По типам файлов</h4>
                    
-                   <div>
+                   {storageStats?.by_type && storageStats.by_type.length > 0 ? (
+                     storageStats.by_type.map((item, index) => {
+                       const totalSize = storageInfo?.used_gb || 1;
+                       const percentage = (item.size_gb / totalSize) * 100;
+                       const colors = ['bg-indigo-500', 'bg-blue-500', 'bg-orange-400', 'bg-purple-500', 'bg-green-500'];
+                       
+                       return (
+                         <div key={item.type}>
                      <div className="flex justify-between text-xs mb-1">
-                       <span>Счета и Акты</span>
-                       <span>89.2 GB (36%)</span>
+                             <span>{item.type}</span>
+                             <span>{formatStorage(item.size_gb)} ({percentage.toFixed(1)}%)</span>
                      </div>
                      <div className="w-full bg-slate-100 rounded-full h-2">
-                       <div className="bg-indigo-500 h-2 rounded-full" style={{ width: '36%' }}></div>
+                             <div 
+                               className={`${colors[index % colors.length]} h-2 rounded-full`} 
+                               style={{ width: `${Math.min(percentage, 100)}%` }}
+                             ></div>
                      </div>
                    </div>
-
-                    <div>
-                     <div className="flex justify-between text-xs mb-1">
-                       <span>Договоры</span>
-                       <span>67.4 GB (27%)</span>
-                     </div>
-                     <div className="w-full bg-slate-100 rounded-full h-2">
-                       <div className="bg-blue-500 h-2 rounded-full" style={{ width: '27%' }}></div>
-                     </div>
-                   </div>
-
-                    <div>
-                     <div className="flex justify-between text-xs mb-1">
-                       <span>Сканы (Изображения)</span>
-                       <span>28.6 GB (12%)</span>
-                     </div>
-                     <div className="w-full bg-slate-100 rounded-full h-2">
-                       <div className="bg-orange-400 h-2 rounded-full" style={{ width: '12%' }}></div>
-                     </div>
-                   </div>
+                       );
+                     })
+                   ) : (
+                     <div className="text-sm text-slate-400">Нет данных по типам файлов</div>
+                   )}
                  </div>
                </div>
 
@@ -209,7 +283,20 @@ export const Settings: React.FC = () => {
       
       {/* Footer Actions */}
       <div className="absolute bottom-6 right-8">
-        <button className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-full shadow-lg hover:bg-blue-700 transition-transform hover:scale-105 active:scale-95 font-medium">
+        <button 
+          onClick={() => {
+            if (activeTab === 'general') {
+              // Update profile logic here
+            } else if (activeTab === 'storage') {
+              // Update storage settings
+              if (settings) {
+                updateSettingsMutation.mutate(settings);
+              }
+            }
+          }}
+          disabled={updateSettingsMutation.loading || updateProfileMutation.loading}
+          className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-full shadow-lg hover:bg-blue-700 transition-transform hover:scale-105 active:scale-95 font-medium disabled:opacity-50"
+        >
           <Save size={18} /> Сохранить изменения
         </button>
       </div>

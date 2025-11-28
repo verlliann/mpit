@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
   PieChart, Pie, Cell
 } from 'recharts';
 import { ArrowUpRight, TrendingUp, Users, FileCheck, Layers, Clock } from 'lucide-react';
-import { ANALYTICS_WORKFLOW, ANALYTICS_TYPES } from '../constants';
+import { analyticsService } from '../api/services/analytics';
+import { useApi } from '../hooks/useApi';
 
 const MetricCard = ({ title, value, trend, isPositive, icon: Icon, color }: any) => (
   <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm hover:shadow-md transition-all">
@@ -27,14 +28,36 @@ const MetricCard = ({ title, value, trend, isPositive, icon: Icon, color }: any)
 const COLORS = ['#2563EB', '#10B981', '#F59E0B', '#64748B'];
 
 export const Analytics: React.FC = () => {
+  const [period, setPeriod] = useState('week');
+  
+  const { data: metrics, loading: metricsLoading } = useApi(
+    () => analyticsService.getMetrics({ period }),
+    { immediate: true }
+  );
+
+  const formatTime = (minutes: number) => {
+    if (minutes < 60) return `${minutes} мин`;
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return mins > 0 ? `${hours} ч ${mins} мин` : `${hours} ч`;
+  };
+
+  const dashboard = metrics?.dashboard;
+  const workflow = metrics?.workflow || [];
+  const types = metrics?.types || [];
+
   return (
     <div className="p-8 max-w-[1600px] mx-auto space-y-8">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Операционная аналитика</h2>
         <div className="flex gap-2">
-            <select className="text-sm border-slate-200 rounded-lg py-2 px-3 focus:ring-primary focus:border-primary">
-               <option>Эта неделя</option>
-               <option>Прошлый месяц</option>
+            <select 
+              value={period}
+              onChange={(e) => setPeriod(e.target.value)}
+              className="text-sm border-slate-200 rounded-lg py-2 px-3 focus:ring-primary focus:border-primary"
+            >
+               <option value="week">Эта неделя</option>
+               <option value="month">Прошлый месяц</option>
             </select>
             <button className="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors">
                 Экспорт отчета
@@ -45,32 +68,32 @@ export const Analytics: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricCard 
           title="Всего документов" 
-          value="1,245" 
-          trend="8.4" 
+          value={metricsLoading ? "..." : (dashboard?.total_documents || 0).toLocaleString()} 
+          trend={undefined}
           isPositive={true} 
           icon={Layers} 
           color="bg-blue-50 text-blue-600" 
         />
         <MetricCard 
           title="Ср. время обработки" 
-          value="45 мин" 
-          trend="12.1" 
+          value={metricsLoading ? "..." : formatTime(dashboard?.avg_processing_time_minutes || 0)} 
+          trend={undefined}
           isPositive={true} 
           icon={Clock} 
           color="bg-purple-50 text-purple-600" 
         />
         <MetricCard 
-          title="Завершено задач" 
-          value="98.5%" 
-          trend="1.2" 
+          title="Обработано страниц" 
+          value={metricsLoading ? "..." : (dashboard?.processed_pages || 0).toLocaleString()} 
+          trend={undefined}
           isPositive={true} 
           icon={FileCheck} 
           color="bg-emerald-50 text-emerald-600" 
         />
         <MetricCard 
-          title="Активные пользователи" 
-          value="24" 
-          trend="0.0" 
+          title="Высокий приоритет" 
+          value={metricsLoading ? "..." : (dashboard?.high_priority_count || 0).toString()} 
+          trend={undefined}
           isPositive={true} 
           icon={Users} 
           color="bg-indigo-50 text-indigo-600" 
@@ -87,7 +110,7 @@ export const Analytics: React.FC = () => {
           <div className="h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={ANALYTICS_WORKFLOW}
+                data={workflow.length > 0 ? workflow : [{ name: 'Нет данных', incoming: 0, processed: 0 }]}
                 margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                 barSize={20}
               >
@@ -113,7 +136,7 @@ export const Analytics: React.FC = () => {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={ANALYTICS_TYPES}
+                  data={types.length > 0 ? types : [{ name: 'Нет данных', value: 0 }]}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
@@ -122,7 +145,7 @@ export const Analytics: React.FC = () => {
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {ANALYTICS_TYPES.map((entry, index) => (
+                  {(types.length > 0 ? types : [{ name: 'Нет данных', value: 0 }]).map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>

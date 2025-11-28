@@ -1,9 +1,12 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { UploadCloud, CheckCircle, AlertTriangle, HardDrive, Clock, FileText, Zap } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { CHART_DATA, MOCK_DOCUMENTS, DOC_ICONS, STATUS_COLORS, STATUS_LABELS, PRIORITY_STYLES, PRIORITY_LABELS } from '../constants';
+import { DOC_ICONS, STATUS_COLORS, STATUS_LABELS, PRIORITY_STYLES, PRIORITY_LABELS } from '../constants';
 import { DocumentType } from '../types';
+import { analyticsService } from '../api/services/analytics';
+import { documentsService } from '../api/services/documents';
+import { useApi } from '../hooks/useApi';
 
 const MetricCard = ({ title, value, subtext, icon: IconComponent, colorClass }: any) => (
   <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
@@ -21,6 +24,47 @@ const MetricCard = ({ title, value, subtext, icon: IconComponent, colorClass }: 
 );
 
 export const Dashboard: React.FC = () => {
+  const { data: metrics, loading: metricsLoading } = useApi(
+    () => analyticsService.getDashboardMetrics(),
+    { immediate: true }
+  );
+  
+  const { data: documentsData, loading: documentsLoading } = useApi(
+    () => documentsService.getDocuments({ limit: 5, page: 1 }),
+    { immediate: true }
+  );
+  
+  const { data: flowData, loading: flowLoading } = useApi(
+    () => analyticsService.getDocumentsFlow({ days: 30 }),
+    { immediate: true }
+  );
+
+  const formatStorage = (gb: number) => {
+    if (gb >= 1000) return `${(gb / 1000).toFixed(1)} TB`;
+    return `${gb.toFixed(0)} GB`;
+  };
+
+  const formatTime = (minutes: number) => {
+    if (minutes < 60) return `${minutes} мин`;
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return mins > 0 ? `${hours} ч ${mins} мин` : `${hours} ч`;
+  };
+
+  const highPriorityCount = metrics?.high_priority_count || 0;
+  const avgTime = metrics?.avg_processing_time_minutes || 0;
+  const processedPages = metrics?.processed_pages || 0;
+  const storageUsed = metrics?.storage_used_gb || 0;
+  const storageTotal = metrics?.storage_total_gb || 1000;
+  const storagePercent = storageTotal > 0 ? Math.round((storageUsed / storageTotal) * 100) : 0;
+
+  const chartData = flowData?.map(item => ({
+    name: item.name,
+    docs: item.docs
+  })) || [];
+
+  const recentDocuments = documentsData?.items || [];
+
   return (
     <div className="p-8 max-w-[1600px] mx-auto space-y-8">
       
@@ -28,29 +72,29 @@ export const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricCard 
           title="Высокий приоритет" 
-          value="7" 
+          value={metricsLoading ? "..." : highPriorityCount.toString()} 
           subtext="Требуют немедленной реакции" 
           icon={Zap} 
           colorClass="bg-red-500 text-red-500" 
         />
         <MetricCard 
           title="Ср. время обработки" 
-          value="12 мин" 
-          subtext="-15% от прошлого месяца" 
+          value={metricsLoading ? "..." : formatTime(avgTime)} 
+          subtext="Среднее время обработки документов" 
           icon={Clock} 
           colorClass="bg-blue-500 text-blue-500" 
         />
         <MetricCard 
           title="Обработано страниц" 
-          value="4,890" 
+          value={metricsLoading ? "..." : processedPages.toLocaleString()} 
           subtext="Автоматически распознано" 
           icon={FileText} 
           colorClass="bg-success text-success" 
         />
         <MetricCard 
           title="Хранилище" 
-          value="247 GB" 
-          subtext="24% использовано" 
+          value={metricsLoading ? "..." : formatStorage(storageUsed)} 
+          subtext={`${storagePercent}% использовано`} 
           icon={HardDrive} 
           colorClass="bg-slate-600 text-slate-600" 
         />
@@ -68,7 +112,7 @@ export const Dashboard: React.FC = () => {
           </div>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={CHART_DATA}>
+              <AreaChart data={chartData.length > 0 ? chartData : [{ name: 'Нет данных', docs: 0 }]}>
                 <defs>
                   <linearGradient id="colorDocs" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#2563EB" stopOpacity={0.1}/>
@@ -132,7 +176,20 @@ export const Dashboard: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {MOCK_DOCUMENTS.slice(0, 5).map((doc) => {
+            {documentsLoading ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-8 text-center text-slate-400">
+                  Загрузка документов...
+                </td>
+              </tr>
+            ) : recentDocuments.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-8 text-center text-slate-400">
+                  Нет документов
+                </td>
+              </tr>
+            ) : (
+              recentDocuments.map((doc) => {
               const IconComp = DOC_ICONS[doc.type as DocumentType] || DOC_ICONS.contract;
               const statusColor = STATUS_COLORS[doc.status];
               const statusLabel = STATUS_LABELS[doc.status];
@@ -149,7 +206,7 @@ export const Dashboard: React.FC = () => {
                       <span className="text-sm font-medium text-slate-800">{doc.title}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-3 text-sm text-slate-600">{doc.counterparty}</td>
+                    <td className="px-6 py-3 text-sm text-slate-600">{doc.counterparty || '—'}</td>
                   <td className="px-6 py-3 text-sm text-slate-600">{new Date(doc.date).toLocaleDateString()}</td>
                   <td className="px-6 py-3">
                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border ${priorityStyle}`}>
@@ -163,7 +220,8 @@ export const Dashboard: React.FC = () => {
                   </td>
                 </tr>
               );
-            })}
+              })
+            )}
           </tbody>
         </table>
       </div>
