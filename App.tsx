@@ -29,7 +29,8 @@ export default function App() {
   // Initialize Theme
   React.useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
-    const isDark = savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    // Default to light mode initially as requested
+    const isDark = savedTheme === 'dark';
     if (isDark) {
       document.documentElement.classList.add('dark');
     } else {
