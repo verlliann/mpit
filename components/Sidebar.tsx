@@ -41,8 +41,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onChangeView }) =>
       onClick={() => onChangeView(view)}
       className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm mb-1 transition-all duration-200 relative group overflow-hidden ${
         activeView === view 
-          ? 'bg-white/50 shadow-inner text-indigo-950 font-semibold' 
-          : 'text-slate-700 hover:bg-white/30 hover:text-indigo-900'
+          ? 'bg-white/50 dark:bg-white/10 shadow-inner text-indigo-950 dark:text-indigo-100 font-semibold' 
+          : 'text-slate-700 dark:text-slate-300 hover:bg-white/30 dark:hover:bg-white/5 hover:text-indigo-900 dark:hover:text-indigo-200'
       }`}
     >
       {/* Glow Indicator for active item */}
@@ -70,50 +70,47 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onChangeView }) =>
     <aside className={`w-72 flex-shrink-0 flex flex-col overflow-y-auto rounded-3xl ${GLASS_STYLES.panel}`}>
       <div className="p-5 space-y-8">
         <div>
-          <h3 className="text-xs font-bold text-indigo-900/50 uppercase tracking-widest mb-4 px-4">Меню</h3>
+          <h3 className="text-xs font-bold text-indigo-900/50 dark:text-indigo-200/50 uppercase tracking-widest mb-4 px-4">Меню</h3>
           <NavItem view="dashboard" icon={LayoutDashboard} label="Обзор" />
           <NavItem view="library" icon={Files} label="Документы" count={documentCount} />
           <NavItem view="analytics" icon={PieChart} label="Аналитика" />
           <NavItem view="upload" icon={Upload} label="Загрузка" />
           <NavItem view="counterparties" icon={Users} label="Контрагенты" />
           
-          <div className="my-4 mx-4 border-t border-indigo-900/10"></div>
+          <div className="my-4 mx-4 border-t border-indigo-900/10 dark:border-white/10"></div>
           
           <NavItem view="chat" icon={Sparkles} label="AI Помощник" />
         </div>
 
         <div>
-          <h3 className="text-xs font-bold text-indigo-900/50 uppercase tracking-widest mb-4 px-4">Папки</h3>
+          <h3 className="text-xs font-bold text-indigo-900/50 dark:text-indigo-200/50 uppercase tracking-widest mb-4 px-4">Папки</h3>
           <NavItem view="favorites" icon={Star} label="Избранное" />
           <NavItem view="archive" icon={FolderOpen} label="Архив" />
           <NavItem view="trash" icon={Trash2} label="Корзина" />
         </div>
 
          <div>
-          <h3 className="text-xs font-bold text-indigo-900/50 uppercase tracking-widest mb-4 px-4">Система</h3>
+          <h3 className="text-xs font-bold text-indigo-900/50 dark:text-indigo-200/50 uppercase tracking-widest mb-4 px-4">Система</h3>
           <NavItem view="settings" icon={Settings} label="Настройки" />
         </div>
 
         {/* Storage Widget */}
-        <div className="mt-auto mx-4 mb-4 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 backdrop-blur-sm">
+        <div className="mt-auto mx-4 mb-4 p-4 bg-indigo-50/50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100/50 dark:border-indigo-500/20 backdrop-blur-sm">
           <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-white rounded-lg text-indigo-600 shadow-sm">
+            <div className="p-2 bg-white dark:bg-indigo-900/50 rounded-lg text-indigo-600 dark:text-indigo-300 shadow-sm">
               <Cloud size={16} />
             </div>
             <div>
-              <p className="text-xs font-bold text-indigo-900">Хранилище</p>
-              <p className="text-[10px] text-indigo-900/60 font-medium">{storageUsed.toFixed(1)} GB из {storageTotal} GB</p>
+              <p className="text-xs font-bold text-indigo-900 dark:text-indigo-100">Хранилище</p>
+              <p className="text-[10px] text-indigo-900/60 dark:text-indigo-200/60 font-medium">{storageUsed.toFixed(1)} GB из {storageTotal} GB</p>
             </div>
           </div>
-          <div className="w-full h-1.5 bg-indigo-200/50 rounded-full overflow-hidden">
+          <div className="w-full h-1.5 bg-indigo-200/50 dark:bg-indigo-900/50 rounded-full overflow-hidden">
             <div 
               className="h-full bg-indigo-500 rounded-full transition-all duration-1000 ease-out"
               style={{ width: `${storagePercent}%` }}
             ></div>
           </div>
-          <button className="w-full mt-3 text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-100/50 py-1.5 rounded-lg transition-colors text-center">
-            Увеличить объем
-          </button>
         </div>
 
         {activeView === 'library' && (

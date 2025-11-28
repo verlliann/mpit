@@ -26,6 +26,17 @@ export default function App() {
   const [selectedCounterparty, setSelectedCounterparty] = useState<Counterparty | null>(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
+  // Initialize Theme
+  React.useEffect(() => {
+    const savedTheme = localStorage.getItem('theme');
+    const isDark = savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
   // Command Palette Handler
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -103,7 +114,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen text-slate-900 font-sans bg-transparent">
+    <div className="flex flex-col h-screen font-sans bg-transparent transition-colors duration-300">
       <Topbar 
         onNavigate={setActiveView} 
         onLogout={handleLogout}

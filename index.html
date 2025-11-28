@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
+        darkMode: 'class',
         theme: {
           extend: {
             colors: {
@@ -35,6 +36,13 @@
                     radial-gradient(circle at 100% 100%, #818cf8 0%, transparent 50%),
                     #f8fafc;
         background-attachment: fixed;
+        transition: background 0.3s ease;
+      }
+      html.dark body {
+        background: radial-gradient(circle at 0% 0%, #1e1b4b 0%, transparent 50%), /* indigo-950 */
+                    radial-gradient(circle at 100% 0%, #312e81 0%, transparent 50%), /* indigo-900 */
+                    radial-gradient(circle at 100% 100%, #4338ca 0%, transparent 50%), /* indigo-700 */
+                    #0f172a; /* slate-950 */
       }
       /* Custom scrollbar for webkit */
       ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -57,7 +65,7 @@
 }
 </script>
 </head>
-  <body class="text-slate-900 antialiased overflow-hidden h-screen w-screen">
+  <body class="text-slate-900 dark:text-slate-100 antialiased overflow-hidden h-screen w-screen transition-colors duration-300">
     <div id="root" class="h-full w-full"></div>
     <script type="module" src="/index.tsx"></script>
   </body>

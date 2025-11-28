@@ -337,22 +337,24 @@ export const Settings: React.FC = () => {
         </div>
         
         {/* Footer Actions */}
-        <div className={`absolute bottom-6 right-8 px-2 py-2 bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/50 transition-all transform duration-300 ${activeTab ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}`}>
-          <button 
-            onClick={() => {
-              if (activeTab === 'general') {
-                // Update profile logic
-              } else if (activeTab === 'storage') {
-                if (settings) {
-                  updateSettingsMutation.mutate(settings);
+        <div className={`sticky bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-white via-white/90 to-transparent transition-all duration-300 ${activeTab ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'}`}>
+          <div className="max-w-4xl mx-auto flex justify-end">
+            <button 
+              onClick={() => {
+                if (activeTab === 'general') {
+                  // Update profile logic
+                } else if (activeTab === 'storage') {
+                  if (settings) {
+                    updateSettingsMutation.mutate(settings);
+                  }
                 }
-              }
-            }}
-            disabled={updateSettingsMutation.loading || updateProfileMutation.loading}
-            className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-8 py-3.5 rounded-xl shadow-lg hover:shadow-indigo-500/40 transition-all hover:scale-105 active:scale-95 font-bold disabled:opacity-50"
-          >
-            <Save size={18} /> Сохранить изменения
-          </button>
+              }}
+              disabled={updateSettingsMutation.loading || updateProfileMutation.loading}
+              className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-blue-600 text-white px-8 py-3.5 rounded-xl shadow-lg hover:shadow-indigo-500/40 transition-all hover:scale-105 active:scale-95 font-bold disabled:opacity-50"
+            >
+              <Save size={18} /> Сохранить изменения
+            </button>
+          </div>
         </div>
       </div>
     </div>

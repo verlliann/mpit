@@ -4,19 +4,19 @@ import { FileText, Receipt, ScrollText, Mail, Image, Files } from 'lucide-react'
 
 export const GLASS_STYLES = {
   // Level 1: Sidebar, Dashboard containers - Base layer
-  panel: "bg-white/40 backdrop-blur-xl border border-white/40 shadow-sm",
+  panel: "bg-white/40 dark:bg-slate-900/40 backdrop-blur-xl border border-white/40 dark:border-white/10 shadow-sm",
   
   // Level 2: Cards, Active elements - Middle layer
-  card: "bg-white/60 backdrop-blur-md border border-white/60 shadow-lg",
+  card: "bg-white/60 dark:bg-slate-800/60 backdrop-blur-md border border-white/60 dark:border-white/10 shadow-lg",
   
   // Level 3: Modals, Slide-overs - Top layer
-  modal: "bg-white/80 backdrop-blur-2xl border border-white/50 shadow-2xl",
+  modal: "bg-white/80 dark:bg-slate-900/90 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-2xl",
   
   // Interactive elements
-  interactive: "hover:bg-white/50 transition-all duration-200 active:scale-95",
+  interactive: "hover:bg-white/50 dark:hover:bg-white/10 transition-all duration-200 active:scale-95",
   
   // Inputs
-  input: "bg-white/50 border border-white/40 focus:bg-white/90 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 backdrop-blur-sm placeholder:text-slate-400 transition-all duration-200",
+  input: "bg-white/50 dark:bg-slate-800/50 border border-white/40 dark:border-white/10 focus:bg-white/90 dark:focus:bg-slate-800/90 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 backdrop-blur-sm placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all duration-200 dark:text-white",
 };
 
 export const MOCK_DOCUMENTS: Document[] = [
