@@ -7,6 +7,11 @@ import { DocumentType } from '../types';
 import { analyticsService } from '../api/services/analytics';
 import { documentsService } from '../api/services/documents';
 import { useApi } from '../hooks/useApi';
+import { ViewState } from '../types';
+
+interface DashboardProps {
+  onNavigate?: (view: ViewState) => void;
+}
 
 const MetricCard = ({ title, value, subtext, icon: IconComponent, colorClass }: any) => (
   <div className={`p-5 rounded-2xl transition-all duration-300 hover:scale-105 group ${GLASS_STYLES.card}`}>
@@ -23,20 +28,23 @@ const MetricCard = ({ title, value, subtext, icon: IconComponent, colorClass }: 
   </div>
 );
 
-export const Dashboard: React.FC = () => {
+export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
+  // Check if token exists before making requests
+  const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('access_token');
+  
   const { data: metrics, loading: metricsLoading } = useApi(
     () => analyticsService.getDashboardMetrics(),
-    { immediate: true }
+    { immediate: hasToken }
   );
   
   const { data: documentsData, loading: documentsLoading } = useApi(
     () => documentsService.getDocuments({ limit: 5, page: 1 }),
-    { immediate: true }
+    { immediate: hasToken }
   );
   
   const { data: flowData, loading: flowLoading } = useApi(
     () => analyticsService.getDocumentsFlow({ days: 30 }),
-    { immediate: true }
+    { immediate: hasToken }
   );
 
   const formatStorage = (gb: number) => {
@@ -55,7 +63,7 @@ export const Dashboard: React.FC = () => {
   const avgTime = metrics?.avg_processing_time_minutes || 0;
   const processedPages = metrics?.processed_pages || 0;
   const storageUsed = metrics?.storage_used_gb || 0;
-  const storageTotal = metrics?.storage_total_gb || 1000;
+  const storageTotal = metrics?.storage_total_gb || 10;
   const storagePercent = storageTotal > 0 ? Math.round((storageUsed / storageTotal) * 100) : 0;
 
   const chartData = flowData?.map(item => ({
@@ -70,6 +78,13 @@ export const Dashboard: React.FC = () => {
       
       {/* Metrics Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <MetricCard 
+          title="ВСЕГО ДОКУМЕНТОВ" 
+          value={metricsLoading ? "..." : (metrics?.total_documents || 0).toLocaleString()} 
+          subtext="Всего документов в системе" 
+          icon={FileText} 
+          colorClass="bg-blue-500 text-blue-600" 
+        />
         <MetricCard 
           title="Высокий приоритет" 
           value={metricsLoading ? "..." : highPriorityCount.toString()} 
@@ -91,6 +106,10 @@ export const Dashboard: React.FC = () => {
           icon={FileText} 
           colorClass="bg-emerald-500 text-emerald-600" 
         />
+      </div>
+      
+      {/* Storage Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricCard 
           title="Хранилище" 
           value={metricsLoading ? "..." : formatStorage(storageUsed)} 
@@ -138,13 +157,22 @@ export const Dashboard: React.FC = () => {
           <div className={`p-6 rounded-2xl ${GLASS_STYLES.panel}`}>
              <h2 className="text-lg font-bold text-slate-800 mb-4">Быстрые действия</h2>
              <div className="space-y-3">
-               <button className="w-full py-3.5 px-4 bg-gradient-to-r from-indigo-500 to-blue-600 text-white rounded-xl hover:shadow-lg hover:shadow-indigo-500/30 transition-all flex items-center justify-center gap-2 font-semibold active:scale-95">
+               <button 
+                 onClick={() => onNavigate?.('upload')}
+                 className="w-full py-3.5 px-4 bg-gradient-to-r from-indigo-500 to-blue-600 text-white rounded-xl hover:shadow-lg hover:shadow-indigo-500/30 transition-all flex items-center justify-center gap-2 font-semibold active:scale-95"
+               >
                  <UploadCloud size={20} /> Загрузить документы
                </button>
-               <button className={`w-full py-3 px-4 rounded-xl text-slate-700 font-medium flex items-center justify-center gap-2 border border-white/40 ${GLASS_STYLES.interactive} bg-white/40`}>
+               <button 
+                 onClick={() => onNavigate?.('library')}
+                 className={`w-full py-3 px-4 rounded-xl text-slate-700 font-medium flex items-center justify-center gap-2 border border-white/40 ${GLASS_STYLES.interactive} bg-white/40`}
+               >
                  <CheckCircle size={18} className="text-emerald-600" /> Массовая проверка
                </button>
-               <button className={`w-full py-3 px-4 rounded-xl text-slate-700 font-medium flex items-center justify-center gap-2 border border-white/40 ${GLASS_STYLES.interactive} bg-white/40`}>
+               <button 
+                 onClick={() => onNavigate?.('archive')}
+                 className={`w-full py-3 px-4 rounded-xl text-slate-700 font-medium flex items-center justify-center gap-2 border border-white/40 ${GLASS_STYLES.interactive} bg-white/40`}
+               >
                  <HardDrive size={18} className="text-slate-500" /> Отчет по архиву
                </button>
              </div>
@@ -155,8 +183,11 @@ export const Dashboard: React.FC = () => {
             <div className="relative z-10">
                 <h3 className="font-bold mb-2 text-lg flex items-center gap-2"><Zap size={18} className="text-yellow-400" /> AI Ассистент</h3>
                 <p className="text-sm text-slate-300 mb-5 leading-relaxed">3 документа отмечены как "Высокий приоритет" и требуют вашего внимания.</p>
-                <button className="text-xs font-bold bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-colors border border-white/10 backdrop-blur-md">
-                Показать список
+                <button 
+                  onClick={() => onNavigate?.('library')}
+                  className="text-xs font-bold bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-colors border border-white/10 backdrop-blur-md"
+                >
+                  Показать список
                 </button>
             </div>
           </div>
@@ -167,7 +198,12 @@ export const Dashboard: React.FC = () => {
       <div className={`rounded-2xl overflow-hidden ${GLASS_STYLES.panel}`}>
         <div className="px-6 py-5 border-b border-slate-200/30 flex justify-between items-center bg-white/30">
           <h2 className="text-lg font-bold text-slate-800">Последние документы</h2>
-          <button className="text-sm text-indigo-600 hover:text-indigo-800 font-medium transition-colors">Все документы</button>
+          <button 
+            onClick={() => onNavigate?.('library')}
+            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
+          >
+            Все документы
+          </button>
         </div>
         <div className="overflow-x-auto">
             <table className="w-full text-left border-separate border-spacing-y-2 px-4">

@@ -1,9 +1,11 @@
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { MoreVertical, ArrowUpDown, Star, Archive, Trash2, Grid, List, Filter, FileText, Layers } from 'lucide-react';
 import { DOC_ICONS, STATUS_COLORS, STATUS_LABELS, getTagColor, PRIORITY_STYLES, PRIORITY_LABELS, GLASS_STYLES } from '../constants';
 import { Document, DocumentType, ViewState, ViewMode } from '../types';
 import { useDocuments, useDocumentMutations } from '../hooks/useDocuments';
+import { documentsService } from '../api/services/documents';
+import { useNotifications } from '../hooks/useNotifications';
 
 interface DocumentLibraryProps {
   onSelectDocument: (doc: Document | null) => void;
@@ -16,10 +18,12 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const [currentPage, setCurrentPage] = useState(1);
+
   // Build params based on current view
   const params = useMemo(() => {
     const baseParams: any = {
-      page: 1,
+      page: currentPage,
       limit: 100,
     };
     
@@ -41,7 +45,7 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
     }
     
     return baseParams;
-  }, [currentView, searchQuery]);
+  }, [currentView, searchQuery, currentPage]);
 
   const [refreshKey, setRefreshKey] = useState(0);
   const paramsWithRefresh = useMemo(() => ({ ...params, _refresh: refreshKey }), [params, refreshKey]);
@@ -53,6 +57,12 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
       setSelectedIds(new Set());
     }
   });
+
+  // Reset page when view or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [currentView, searchQuery]);
+  const { success, error: notifyError } = useNotifications();
 
   const documents = documentsData?.items || [];
 
@@ -81,6 +91,36 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
   const handleBulkArchive = async () => {
     if (selectedIds.size === 0) return;
     await bulkArchive(Array.from(selectedIds));
+  };
+
+  const handleBulkDownload = async () => {
+    if (selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+    try {
+      for (const id of ids) {
+        const doc = documents.find(d => d.id === id);
+        if (doc) {
+          try {
+            const blob = await documentsService.downloadDocument(id);
+            const url = window.URL.createObjectURL(blob);
+            const a = window.document.createElement('a');
+            a.href = url;
+            a.download = doc.title || 'document';
+            window.document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            window.document.body.removeChild(a);
+            // Небольшая задержка между скачиваниями
+            await new Promise(resolve => setTimeout(resolve, 200));
+          } catch (err) {
+            console.error(`Ошибка скачивания документа ${id}:`, err);
+          }
+        }
+      }
+      success('Документы скачаны', `Скачано ${ids.length} документ(ов)`);
+    } catch (error: any) {
+      notifyError('Ошибка скачивания', error.message || 'Не удалось скачать документы');
+    }
   };
 
   const getPageTitle = () => {
@@ -113,7 +153,13 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
           </div>
           {selectedIds.size > 0 && (
              <div className="flex items-center gap-2 animate-in fade-in duration-200 ml-2">
-               <button className={`px-3 py-1.5 rounded-lg text-sm text-slate-700 font-medium ${GLASS_STYLES.interactive} bg-white/40 border border-white/40`}>Скачать</button>
+               <button 
+                 onClick={handleBulkDownload}
+                 disabled={mutationsLoading}
+                 className={`px-3 py-1.5 rounded-lg text-sm text-slate-700 font-medium ${GLASS_STYLES.interactive} bg-white/40 border border-white/40 disabled:opacity-50`}
+               >
+                 Скачать
+               </button>
                {currentView !== 'trash' && (
                   <button 
                     onClick={handleBulkArchive}
@@ -353,6 +399,7 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
           <div>Показано 1-{documents.length} из {documentsData.total}</div>
           <div className="flex items-center gap-2">
             <button 
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
               className={`px-3 py-1 rounded border border-white/40 hover:bg-white/50 disabled:opacity-50 transition-colors ${GLASS_STYLES.interactive}`} 
               disabled={documentsData.page <= 1}
             >
@@ -360,6 +407,7 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
             </button>
             <div className="px-2 font-bold text-indigo-900">{documentsData.page} / {documentsData.pages}</div>
             <button 
+              onClick={() => setCurrentPage(prev => Math.min(documentsData.pages, prev + 1))}
               className={`px-3 py-1 rounded border border-white/40 hover:bg-white/50 disabled:opacity-50 transition-colors ${GLASS_STYLES.interactive}`} 
               disabled={documentsData.page >= documentsData.pages}
             >

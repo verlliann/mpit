@@ -98,9 +98,9 @@ export interface CreateCounterpartyRequest {
   name: string;
   inn: string;
   kpp?: string;
-  address: string;
-  email: string;
-  phone: string;
+  address?: string;
+  email?: string;
+  phone?: string;
 }
 
 export interface UpdateCounterpartyRequest {

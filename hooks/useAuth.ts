@@ -16,7 +16,9 @@ export function useAuth() {
           setUser(currentUser);
         } catch (err) {
           console.error('Auth check failed:', err);
+          // If token is invalid, clear it
           setUser(null);
+          authService.logout().catch(() => {});
         }
       }
       setLoading(false);
@@ -31,6 +33,15 @@ export function useAuth() {
 
     try {
       const response = await authService.login(credentials);
+      
+      // Verify token was saved
+      const token = localStorage.getItem('access_token');
+      if (!token) {
+        console.error('❌ Token was not saved after login!');
+        throw new Error('Token was not saved');
+      }
+      console.log('✅ Login successful, token verified in localStorage');
+      
       setUser(response.user);
       return response;
     } catch (err: any) {

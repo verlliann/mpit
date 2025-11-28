@@ -1,22 +1,23 @@
 import logging
 import json
 from typing import List, Dict, Optional
-from sentence_transformers import SentenceTransformer
 import numpy as np
+import torch
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 from app.core.config import settings
 from app.models.vector_store import DocumentChunk
 from app.models.document import Document
+from app.services.qwen_service import QwenService
 
 logger = logging.getLogger(__name__)
 
 
 class RAGService:
-    """Service for RAG operations"""
+    """Service for RAG operations using Qwen3-4B for embeddings"""
     
     _instance = None
-    _embedding_model = None
+    _qwen_service = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -24,26 +25,79 @@ class RAGService:
         return cls._instance
     
     def __init__(self):
-        if self._embedding_model is None:
-            self._load_embedding_model()
+        # Lazy loading - Qwen модель будет загружена при первом использовании
+        # Это предотвращает блокировку при старте приложения
+        pass
     
-    def _load_embedding_model(self):
-        """Load sentence transformer model for embeddings"""
-        try:
-            logger.info(f"Загрузка модели эмбеддингов: {settings.RAG_EMBEDDING_MODEL}")
-            self._embedding_model = SentenceTransformer(settings.RAG_EMBEDDING_MODEL)
-            logger.info("✅ Модель эмбеддингов загружена")
-        except Exception as e:
-            logger.error(f"❌ Ошибка при загрузке модели эмбеддингов: {e}")
-            raise
+    def _ensure_qwen_loaded(self):
+        """Ensure Qwen model is loaded (lazy loading)"""
+        if self._qwen_service is None:
+            self._qwen_service = QwenService()
+            # Убеждаемся, что модель загружена
+            self._qwen_service._ensure_model_loaded()
     
     def generate_embedding(self, text: str) -> np.ndarray:
-        """Generate embedding for text"""
-        if self._embedding_model is None:
-            self._load_embedding_model()
+        """
+        Generate embedding for text using Qwen3-4B model
+        Использует скрытые состояния модели для создания эмбеддингов
+        """
+        self._ensure_qwen_loaded()
         
-        embedding = self._embedding_model.encode(text, convert_to_numpy=True)
-        return embedding
+        try:
+            model = self._qwen_service._model
+            tokenizer = self._qwen_service._tokenizer
+            
+            if model is None or tokenizer is None:
+                raise RuntimeError("Qwen model not loaded")
+            
+            # Токенизация текста
+            inputs = tokenizer(
+                text,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=2048
+            )
+            
+            device = self._qwen_service._get_best_device()
+            if device != "cpu":
+                inputs = {k: v.to(device) for k, v in inputs.items()}
+            
+            # Получаем скрытые состояния модели
+            with torch.no_grad():
+                outputs = model(**inputs, output_hidden_states=True)
+                # Используем последний слой скрытых состояний
+                hidden_states = outputs.hidden_states[-1]  # [batch_size, seq_len, hidden_size]
+                
+                # Применяем mean pooling для получения эмбеддинга
+                # Учитываем attention mask для правильного усреднения
+                attention_mask = inputs.get('attention_mask', None)
+                if attention_mask is not None:
+                    # Расширяем mask для правильной формы
+                    mask_expanded = attention_mask.unsqueeze(-1).expand(hidden_states.size()).float()
+                    # Суммируем скрытые состояния с учетом mask
+                    sum_hidden = torch.sum(hidden_states * mask_expanded, dim=1)
+                    # Суммируем mask для нормализации
+                    sum_mask = torch.clamp(mask_expanded.sum(dim=1), min=1e-9)
+                    # Усредняем
+                    embedding = sum_hidden / sum_mask
+                else:
+                    # Если нет mask, просто усредняем по длине последовательности
+                    embedding = torch.mean(hidden_states, dim=1)
+                
+                # Конвертируем в numpy
+                embedding_np = embedding.cpu().numpy().flatten()
+                
+                # Нормализуем эмбеддинг (L2 нормализация)
+                norm = np.linalg.norm(embedding_np)
+                if norm > 0:
+                    embedding_np = embedding_np / norm
+                
+                return embedding_np.astype(np.float32)
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка при генерации эмбеддинга через Qwen: {e}")
+            raise
     
     async def process_document_for_metrics(
         self,

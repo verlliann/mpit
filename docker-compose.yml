@@ -72,6 +72,7 @@ services:
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET_NAME: sirius-documents
       MINIO_USE_SSL: "false"
+      STORAGE_TOTAL_GB: "10.0"
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       QWEN_MODEL_PATH: ${QWEN_MODEL_PATH:-/app/models}
       QWEN_DEVICE: ${QWEN_DEVICE:-cpu}

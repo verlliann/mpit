@@ -18,10 +18,16 @@ async def get_current_user(
     db: AsyncSession = Depends(get_db)
 ) -> User:
     """Get current authenticated user"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     token = credentials.credentials
+    logger.debug(f"Received token: {token[:20]}...")
+    
     payload = decode_token(token)
     
     if payload is None:
+        logger.warning("Failed to decode token")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
@@ -30,15 +36,26 @@ async def get_current_user(
     
     user_id: str = payload.get("sub")
     if user_id is None:
+        logger.warning("Token payload missing 'sub' field")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",
         )
     
-    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        logger.error(f"Invalid user_id format: {user_id}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user ID format",
+        )
+    
+    result = await db.execute(select(User).where(User.id == user_uuid))
     user = result.scalar_one_or_none()
     
     if user is None:
+        logger.warning(f"User not found: {user_id}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",

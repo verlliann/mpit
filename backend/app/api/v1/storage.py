@@ -29,7 +29,7 @@ async def get_storage_info(
     used_bytes = result.scalar() or 0
     used_gb = used_bytes / (1024 ** 3)
     
-    total_gb = 1024  # Default
+    total_gb = settings.STORAGE_TOTAL_GB
     
     return {
         "total_gb": total_gb,

@@ -33,44 +33,50 @@ class QwenService:
         pass
     
     def _ensure_model_loaded(self):
-        """Ensure model is loaded (lazy loading)"""
+        """Ensure model is loaded (lazy loading) - вызывается только при первом использовании"""
         if self._model is None or self._tokenizer is None:
-            logger.info("Loading Qwen model (lazy loading)...")
+            logger.info("🔄 Загрузка модели Qwen из локальной папки (lazy loading, первый запрос)...")
             try:
                 self._load_model()
             except Exception as e:
-                logger.error(f"Failed to load Qwen model: {e}", exc_info=True)
+                logger.error(f"❌ Failed to load Qwen model: {e}", exc_info=True)
                 raise
     
     def _load_model(self):
-        """Load Qwen model"""
+        """Load Qwen model - вызывается только при первом использовании (lazy loading)"""
+        logger.info("🔄 Начинаю загрузку модели Qwen (lazy loading)...")
+        
         # Проверяем наличие локальной модели
-        model_name = "Qwen/Qwen2.5-0.5B-Instruct"  # Fallback на Hugging Face
+        # Используем Qwen3-4B по умолчанию (как в предыдущем проекте)
+        model_name = settings.QWEN_MODEL_NAME
         use_local = False
         
-        # Проверяем локальную модель
+        # Проверяем локальную модель (только проверка файлов, без загрузки)
         if settings.QWEN_MODEL_PATH:
             model_path = settings.QWEN_MODEL_PATH
             index_file = os.path.join(model_path, "model.safetensors.index.json")
             
-            if os.path.exists(model_path) and os.path.exists(index_file):
+            # Быстрая проверка без чтения больших файлов
+            if os.path.isdir(model_path) and os.path.isfile(index_file):
                 try:
+                    # Только проверяем наличие файлов, не загружаем их
                     with open(index_file, 'r') as f:
                         index_data = json.load(f)
                     
                     weight_map = index_data.get('weight_map', {})
                     required_files = set(weight_map.values())
+                    # Проверяем только существование файлов, не загружаем
                     all_files_exist = all(
-                        os.path.exists(os.path.join(model_path, fname))
+                        os.path.isfile(os.path.join(model_path, fname))
                         for fname in required_files
                     )
                     
                     if all_files_exist:
                         use_local = True
                         model_name = model_path
-                        logger.info(f"✅ Используется локальная модель: {model_path}")
+                        logger.info(f"✅ Найдена локальная модель: {model_path}, начинаю загрузку...")
                     else:
-                        missing = [f for f in required_files if not os.path.exists(os.path.join(model_path, f))]
+                        missing = [f for f in required_files if not os.path.isfile(os.path.join(model_path, f))]
                         logger.warning(f"⚠️ Локальная модель неполная, отсутствуют файлы: {missing[:5]}")
                 except Exception as e:
                     logger.warning(f"⚠️ Ошибка при проверке локальной модели: {e}")
@@ -79,6 +85,7 @@ class QwenService:
         
         if not use_local:
             logger.info(f"📥 Загрузка модели из Hugging Face: {model_name}")
+            logger.warning("⚠️ Это может занять несколько минут при первом запуске...")
         
         device = self._get_best_device()
         logger.info(f"Инициализация модели {model_name} на устройстве {device}")
@@ -98,11 +105,13 @@ class QwenService:
             logger.info("Используется 4-bit quantization (рекомендуется для Mac)")
         
         try:
+            logger.info("📥 Загрузка токенизатора...")
             self._tokenizer = AutoTokenizer.from_pretrained(
                 model_name,
                 trust_remote_code=True
             )
             
+            logger.info("📥 Загрузка модели (это может занять время)...")
             self._model = AutoModelForCausalLM.from_pretrained(
                 model_name,
                 **model_kwargs
@@ -486,5 +495,7 @@ class QwenService:
         }
 
 
-# Singleton instance
+# Singleton instance - создается при импорте, но модель НЕ загружается
+# Модель загрузится только при первом вызове _ensure_model_loaded()
 qwen_service = QwenService()
+logger.debug("QwenService singleton created (model not loaded yet - lazy loading)")

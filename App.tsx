@@ -67,7 +67,7 @@ export default function App() {
   const renderContent = () => {
     switch (activeView) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard onNavigate={setActiveView} />;
       case 'library':
       case 'favorites':
       case 'archive':

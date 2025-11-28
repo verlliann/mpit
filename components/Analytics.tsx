@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
   PieChart, Pie, Cell
@@ -31,10 +31,20 @@ const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#64748b'];
 export const Analytics: React.FC = () => {
   const [period, setPeriod] = useState('week');
   
-  const { data: metrics, loading: metricsLoading } = useApi(
+  // Check if token exists before making requests
+  const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('access_token');
+  
+  const { data: metrics, loading: metricsLoading, execute } = useApi(
     () => analyticsService.getMetrics({ period }),
-    { immediate: true }
+    { immediate: hasToken }
   );
+  
+  // Update data when period changes
+  useEffect(() => {
+    if (hasToken && period) {
+      execute();
+    }
+  }, [period, hasToken, execute]);
 
   const formatTime = (minutes: number) => {
     if (minutes < 60) return `${minutes} мин`;

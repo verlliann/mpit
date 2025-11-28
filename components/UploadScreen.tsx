@@ -46,9 +46,21 @@ export const UploadScreen: React.FC = () => {
             : f
         ));
       } catch (error: any) {
+        // Extract error message safely
+        let errorMessage = 'Ошибка загрузки';
+        if (error?.message) {
+          errorMessage = typeof error.message === 'string' 
+            ? error.message 
+            : JSON.stringify(error.message);
+        } else if (error?.details) {
+          errorMessage = typeof error.details === 'string'
+            ? error.details
+            : JSON.stringify(error.details);
+        }
+        
         setFiles(prev => prev.map(f => 
           f.id === fileUpload.id 
-            ? { ...f, status: 'error' as const, error: error.message || 'Ошибка загрузки' }
+            ? { ...f, status: 'error' as const, error: errorMessage }
             : f
         ));
       }

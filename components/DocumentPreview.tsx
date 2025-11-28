@@ -5,6 +5,7 @@ import { Document, DocumentType, DocumentStatus, PriorityLevel, DocumentHistory 
 import { DOC_ICONS, STATUS_COLORS, STATUS_LABELS, getTagColor, PRIORITY_LABELS, PRIORITY_STYLES, GLASS_STYLES } from '../constants';
 import { documentsService } from '../api/services/documents';
 import { useMutation } from '../hooks/useApi';
+import { useNotifications } from '../hooks/useNotifications';
 
 interface DocumentPreviewProps {
   document: Document | null;
@@ -18,6 +19,7 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ document, onCl
   const [editedDoc, setEditedDoc] = useState<Document | null>(null);
   const [newTag, setNewTag] = useState('');
   const [isAddingTag, setIsAddingTag] = useState(false);
+  const { success, error: notifyError } = useNotifications();
 
   const updateMutation = useMutation(
     ({ id, data }: { id: string; data: any }) => documentsService.updateDocument(id, data),
@@ -99,8 +101,48 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ document, onCl
   };
 
   const copyLink = () => {
-    // Mock copy
-    alert('Ссылка скопирована в буфер обмена');
+    if (document) {
+      const url = `${window.location.origin}/documents/${document.id}`;
+      navigator.clipboard.writeText(url).then(() => {
+        success('Ссылка скопирована', 'Ссылка на документ скопирована в буфер обмена');
+      }).catch(() => {
+        notifyError('Ошибка', 'Не удалось скопировать ссылку');
+      });
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!document) return;
+    try {
+      const blob = await documentsService.downloadDocument(document.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = window.document.createElement('a');
+      a.href = url;
+      a.download = document.title || 'document';
+      window.document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      window.document.body.removeChild(a);
+      success('Документ скачан', 'Файл успешно загружен');
+    } catch (error: any) {
+      notifyError('Ошибка скачивания', error.message || 'Не удалось скачать документ');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!document) return;
+    if (!confirm(`Удалить документ "${document.title}"?`)) return;
+    
+    try {
+      await documentsService.deleteDocument(document.id);
+      success('Документ удален', 'Документ перемещен в корзину');
+      if (onUpdate) {
+        onUpdate({ ...document, isDeleted: true });
+      }
+      onClose();
+    } catch (error: any) {
+      notifyError('Ошибка удаления', error.message || 'Не удалось удалить документ');
+    }
   };
 
   return (
@@ -158,13 +200,18 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ document, onCl
         {/* Main Actions Bar */}
         {!isEditing && (
           <div className="grid grid-cols-5 gap-2 px-4 py-3 border-b border-white/20 bg-white/20">
-            <button className={`flex flex-col items-center gap-1 p-2 rounded-xl text-slate-600 transition-all group ${GLASS_STYLES.interactive}`} title="Просмотр">
-              <Eye size={20} className="group-hover:text-indigo-600 transition-colors" /> <span className="text-[10px] font-medium">Взгляд</span>
-            </button>
-            <button className={`flex flex-col items-center gap-1 p-2 rounded-xl text-slate-600 transition-all group ${GLASS_STYLES.interactive}`} title="Скачать">
+            <button 
+              onClick={handleDownload}
+              className={`flex flex-col items-center gap-1 p-2 rounded-xl text-slate-600 transition-all group ${GLASS_STYLES.interactive}`} 
+              title="Скачать"
+            >
               <Download size={20} className="group-hover:text-indigo-600 transition-colors" /> <span className="text-[10px] font-medium">Скачать</span>
             </button>
-             <button onClick={copyLink} className={`flex flex-col items-center gap-1 p-2 rounded-xl text-slate-600 transition-all group ${GLASS_STYLES.interactive}`} title="Поделиться">
+             <button 
+              onClick={copyLink} 
+              className={`flex flex-col items-center gap-1 p-2 rounded-xl text-slate-600 transition-all group ${GLASS_STYLES.interactive}`} 
+              title="Поделиться"
+            >
               <Share2 size={20} className="group-hover:text-indigo-600 transition-colors" /> <span className="text-[10px] font-medium">Ссылка</span>
             </button>
             <button 
@@ -174,7 +221,11 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ document, onCl
             >
               <Edit size={20} className="group-hover:text-indigo-600 transition-colors" /> <span className="text-[10px] font-medium">Правка</span>
             </button>
-            <button className={`flex flex-col items-center gap-1 p-2 rounded-xl text-rose-600 transition-all hover:bg-rose-50 border border-transparent hover:border-rose-100`} title="Удалить">
+            <button 
+              onClick={handleDelete}
+              className={`flex flex-col items-center gap-1 p-2 rounded-xl text-rose-600 transition-all hover:bg-rose-50 border border-transparent hover:border-rose-100`} 
+              title="Удалить"
+            >
               <Trash2 size={20} /> <span className="text-[10px] font-medium">Удалить</span>
             </button>
           </div>
@@ -440,5 +491,4 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ document, onCl
       </div>
     </>
   );
-};  );
 };

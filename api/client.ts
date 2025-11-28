@@ -7,16 +7,49 @@ export const setAccessToken = (token: string | null) => {
   accessToken = token;
   if (token) {
     localStorage.setItem('access_token', token);
+    console.log('🔐 Token saved to localStorage:', {
+      hasToken: !!token,
+      tokenLength: token.length,
+      tokenPreview: token.substring(0, 30) + '...'
+    });
   } else {
     localStorage.removeItem('access_token');
+    console.log('🔓 Token removed from localStorage');
   }
 };
 
 export const getAccessToken = (): string | null => {
-  if (!accessToken) {
-    accessToken = localStorage.getItem('access_token');
+  // Always read from localStorage to ensure we have the latest token
+  try {
+    const token = localStorage.getItem('access_token');
+    
+    // If mock token detected, clear it immediately
+    if (token && token.startsWith('mock-jwt-token-')) {
+      console.error('❌ Mock token detected in localStorage! Clearing it...');
+      localStorage.removeItem('access_token');
+      accessToken = null;
+      return null;
+    }
+    
+    // Sync in-memory variable
+    accessToken = token;
+    
+    if (token) {
+      console.log('🔑 Token retrieved from localStorage:', {
+        hasToken: !!token,
+        tokenLength: token.length,
+        tokenPreview: token.substring(0, 30) + '...',
+        isRealToken: !token.startsWith('mock-')
+      });
+    } else {
+      console.warn('⚠️ No token found in localStorage');
+    }
+    
+    return token;
+  } catch (error) {
+    console.error('❌ Error reading from localStorage:', error);
+    return null;
   }
-  return accessToken;
 };
 
 // Request types
@@ -87,17 +120,45 @@ class HttpClient {
     return url.toString();
   }
 
-  private getHeaders(options?: RequestOptions): HeadersInit {
-    const headers: HeadersInit = {
-      ...API_CONFIG.HEADERS,
-      ...options?.headers,
-    };
+  private getHeaders(options?: RequestOptions, isFormData: boolean = false): HeadersInit {
+    const headers: HeadersInit = {};
+    
+    // Only add default headers if not FormData
+    if (!isFormData) {
+      Object.assign(headers, API_CONFIG.HEADERS);
+    }
+    
+    // Add custom headers
+    if (options?.headers) {
+      Object.entries(options.headers).forEach(([key, value]) => {
+        // Skip Content-Type for FormData - browser will set it with boundary
+        if (!(isFormData && key.toLowerCase() === 'content-type')) {
+          headers[key] = value as string;
+        }
+      });
+    }
 
     // Add auth token if required
     if (options?.requiresAuth !== false) {
       const token = getAccessToken();
-      if (token) {
-        (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+      if (token && token.trim()) {
+        (headers as Record<string, string>)['Authorization'] = `Bearer ${token.trim()}`;
+        // Always log
+        console.log('✅ Adding Authorization header:', {
+          hasToken: !!token,
+          tokenLength: token.length,
+          tokenPreview: token.substring(0, 30) + '...',
+          headerSet: true
+        });
+      } else {
+        console.error('❌ No token available for authenticated request!');
+        console.error('Debug info:', {
+          token: token,
+          tokenType: typeof token,
+          localStorage_access_token: localStorage.getItem('access_token'),
+          localStorage_allKeys: Object.keys(localStorage),
+          requiresAuth: options?.requiresAuth
+        });
       }
     }
 
@@ -109,13 +170,43 @@ class HttpClient {
     const isJson = contentType?.includes('application/json');
 
     if (!response.ok) {
+      // Log 401 errors for debugging
+      if (response.status === 401) {
+        const token = getAccessToken();
+        console.error('❌ 401 Unauthorized Error:', {
+          url: response.url,
+          hasToken: !!token,
+          tokenPreview: token ? `${token.substring(0, 30)}...` : 'none',
+          tokenLength: token?.length || 0,
+          localStorage: {
+            access_token: localStorage.getItem('access_token') ? 'exists' : 'missing',
+            allKeys: Object.keys(localStorage)
+          }
+        });
+      }
+      
       let errorMessage = `HTTP Error ${response.status}`;
       let errorDetails = null;
 
       if (isJson) {
         try {
           const errorData = await response.json();
-          errorMessage = errorData.message || errorData.detail || errorMessage;
+          
+          // Handle FastAPI validation errors (422)
+          if (response.status === 422 && Array.isArray(errorData.detail)) {
+            // Format validation errors into readable message
+            const validationErrors = errorData.detail.map((err: any) => {
+              const field = err.loc ? err.loc.slice(1).join('.') : 'field';
+              return `${field}: ${err.msg}`;
+            }).join('; ');
+            errorMessage = `Validation error: ${validationErrors}`;
+          } else {
+            // Regular error message
+            errorMessage = errorData.message || 
+                          (typeof errorData.detail === 'string' ? errorData.detail : null) ||
+                          errorMessage;
+          }
+          
           errorDetails = errorData;
         } catch {
           // Ignore JSON parse errors
@@ -145,7 +236,20 @@ class HttpClient {
     const { params, requiresAuth = true, ...fetchOptions } = options;
     
     const url = this.buildUrl(endpoint, params);
-    const headers = this.getHeaders({ ...options, requiresAuth });
+    
+    // Check if body is FormData
+    const isFormData = fetchOptions.body instanceof FormData;
+    const headers = this.getHeaders({ ...options, requiresAuth }, isFormData);
+
+    // Log request details
+    console.log('📤 Making request:', {
+      method: fetchOptions.method || 'GET',
+      url,
+      requiresAuth,
+      hasAuthHeader: !!(headers as Record<string, string>)['Authorization'],
+      isFormData,
+      contentType: (headers as Record<string, string>)['Content-Type'] || 'auto'
+    });
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
@@ -230,17 +334,11 @@ class HttpClient {
     formData: FormData,
     options?: RequestOptions
   ): Promise<T> {
-    const { headers, ...rest } = options || {};
-    
+    // Pass FormData directly to request - it will detect it and skip Content-Type
     return this.request<T>(endpoint, {
-      ...rest,
+      ...options,
       method: 'POST',
       body: formData,
-      headers: {
-        // Let browser set Content-Type for FormData
-        ...headers,
-        'Content-Type': undefined as any,
-      } as HeadersInit,
     });
   }
 

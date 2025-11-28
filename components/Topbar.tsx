@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Search, Bell, Settings, User, Mic, LogOut, CheckCircle, AlertTriangle, X } from 'lucide-react';
 import { ViewState } from '../types';
 import { GLASS_STYLES } from '../constants';
+import { documentsService } from '../api/services/documents';
 
 interface TopbarProps {
   onNavigate: (view: ViewState) => void;
@@ -13,6 +14,9 @@ export const Topbar: React.FC<TopbarProps> = ({ onNavigate, onLogout, onOpenComm
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Close dropdowns when clicking outside
   const notifRef = useRef<HTMLDivElement>(null);
@@ -31,6 +35,55 @@ export const Topbar: React.FC<TopbarProps> = ({ onNavigate, onLogout, onOpenComm
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Search handler
+  const handleSearch = async (query: string) => {
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    
+    setIsSearching(true);
+    try {
+      // API search returns { answer, documents, total } format
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/documents/search?query=${encodeURIComponent(query)}&limit=5`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        },
+      });
+      if (response.ok) {
+        const result = await response.json();
+        setSearchResults(result.documents || []);
+      } else {
+        setSearchResults([]);
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchQuery) {
+        handleSearch(searchQuery);
+      } else {
+        setSearchResults([]);
+      }
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      onNavigate('library');
+      // Можно добавить параметр поиска в URL или состояние
+    }
+  };
+
   return (
     <header className={`mx-4 mt-4 mb-0 rounded-2xl flex items-center justify-between px-6 py-2 sticky top-4 z-30 transition-all duration-300 ${GLASS_STYLES.panel} border-white/20`}>
       {/* Logo Area */}
@@ -43,11 +96,13 @@ export const Topbar: React.FC<TopbarProps> = ({ onNavigate, onLogout, onOpenComm
 
       {/* Intelligent Search */}
       <div className="flex-1 max-w-2xl relative mx-4">
-        <div className={`flex items-center rounded-xl px-4 transition-all duration-200 border ${isSearchFocused ? 'bg-white/80 shadow-lg ring-2 ring-indigo-500/20 border-indigo-200' : 'bg-black/5 border-transparent hover:bg-white/40 hover:border-white/40 shadow-inner'}`}>
+        <form onSubmit={handleSearchSubmit} className={`flex items-center rounded-xl px-4 transition-all duration-200 border ${isSearchFocused ? 'bg-white/80 shadow-lg ring-2 ring-indigo-500/20 border-indigo-200' : 'bg-black/5 border-transparent hover:bg-white/40 hover:border-white/40 shadow-inner'}`}>
           <Search size={18} className="text-slate-500" />
           <input 
             type="text"
             placeholder="Найти документы, контрагентов, суммы..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-transparent border-none focus:ring-0 text-sm py-3 px-3 text-slate-800 placeholder:text-slate-500"
             onFocus={() => setIsSearchFocused(true)}
             onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
@@ -62,34 +117,72 @@ export const Topbar: React.FC<TopbarProps> = ({ onNavigate, onLogout, onOpenComm
           >
             ⌘K
           </div>
-        </div>
+        </form>
 
         {/* Search Dropdown / Suggestions */}
         {isSearchFocused && (
           <div className={`absolute top-full left-0 right-0 mt-3 py-3 animate-in fade-in slide-in-from-top-2 duration-200 z-50 rounded-2xl ${GLASS_STYLES.modal}`}>
-            <div className="px-4 pb-2 border-b border-slate-100/50">
-              <span className="text-xs font-bold text-indigo-900/50 uppercase tracking-widest">Быстрые фильтры</span>
-              <div className="flex gap-2 mt-2 flex-wrap">
-                 {['Договоры', 'Счета', 'За месяц', '> 1 млн ₽', 'На проверке'].map(tag => (
-                   <button key={tag} className="px-2.5 py-1 bg-indigo-50/50 hover:bg-indigo-100 hover:text-indigo-700 text-xs rounded-lg text-slate-600 transition-colors font-medium">
-                     {tag}
-                   </button>
-                 ))}
+            {isSearching ? (
+              <div className="px-4 py-8 text-center text-slate-400">
+                Поиск...
               </div>
-            </div>
-            <div className="px-4 py-2">
-               <span className="text-xs font-bold text-indigo-900/50 uppercase tracking-widest">Недавнее</span>
-               <ul className="mt-2 space-y-1">
-                 <li className="text-sm text-slate-700 hover:bg-indigo-50/50 px-3 py-2 rounded-lg cursor-pointer flex items-center gap-3 transition-colors">
-                    <div className="p-1.5 bg-white rounded-md shadow-sm text-indigo-500"><Search size={14} /></div>
-                    Договор Рога и Копыта
-                 </li>
-                 <li className="text-sm text-slate-700 hover:bg-indigo-50/50 px-3 py-2 rounded-lg cursor-pointer flex items-center gap-3 transition-colors">
-                    <div className="p-1.5 bg-white rounded-md shadow-sm text-indigo-500"><Search size={14} /></div>
-                    Счета январь 2025
-                 </li>
-               </ul>
-            </div>
+            ) : searchResults.length > 0 ? (
+              <div className="px-4 py-2">
+                <span className="text-xs font-bold text-indigo-900/50 uppercase tracking-widest">Результаты поиска</span>
+                <ul className="mt-2 space-y-1">
+                  {searchResults.map((doc) => (
+                    <li 
+                      key={doc.id}
+                      onClick={() => {
+                        onNavigate('library');
+                        setSearchQuery('');
+                        setIsSearchFocused(false);
+                      }}
+                      className="text-sm text-slate-700 hover:bg-indigo-50/50 px-3 py-2 rounded-lg cursor-pointer flex items-center gap-3 transition-colors"
+                    >
+                      <div className="p-1.5 bg-white rounded-md shadow-sm text-indigo-500"><Search size={14} /></div>
+                      {doc.title}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : searchQuery ? (
+              <div className="px-4 py-2">
+                <span className="text-xs font-bold text-indigo-900/50 uppercase tracking-widest">Быстрые фильтры</span>
+                <div className="flex gap-2 mt-2 flex-wrap">
+                  {['Договоры', 'Счета', 'За месяц', '> 1 млн ₽', 'На проверке'].map(tag => (
+                    <button 
+                      key={tag}
+                      onClick={() => {
+                        setSearchQuery(tag);
+                        onNavigate('library');
+                      }}
+                      className="px-2.5 py-1 bg-indigo-50/50 hover:bg-indigo-100 hover:text-indigo-700 text-xs rounded-lg text-slate-600 transition-colors font-medium"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="px-4 py-2">
+                <span className="text-xs font-bold text-indigo-900/50 uppercase tracking-widest">Быстрые фильтры</span>
+                <div className="flex gap-2 mt-2 flex-wrap">
+                  {['Договоры', 'Счета', 'За месяц', '> 1 млн ₽', 'На проверке'].map(tag => (
+                    <button 
+                      key={tag}
+                      onClick={() => {
+                        setSearchQuery(tag);
+                        onNavigate('library');
+                      }}
+                      className="px-2.5 py-1 bg-indigo-50/50 hover:bg-indigo-100 hover:text-indigo-700 text-xs rounded-lg text-slate-600 transition-colors font-medium"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

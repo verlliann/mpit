@@ -22,39 +22,45 @@ export const authService = {
    * Login user
    */
   async login(credentials: LoginRequest): Promise<LoginResponse> {
-    // Try demo credentials first (mock authentication)
-    if (credentials.email === DEMO_CREDENTIALS.email && 
-        credentials.password === DEMO_CREDENTIALS.password) {
-      
-      const mockToken = 'mock-jwt-token-' + Date.now();
-      setAccessToken(mockToken);
-      
-      const mockResponse: LoginResponse = {
-        access_token: mockToken,
-        refresh_token: 'mock-refresh-token-' + Date.now(),
-        token_type: 'Bearer',
-        user: MOCK_USER
-      };
-      
-      console.log('✅ Mock authentication successful');
-      return mockResponse;
-    }
-    
-    // Try real API if credentials don't match demo
+    // Always use real API
     try {
+      // Clear any existing mock tokens first
+      const existingToken = localStorage.getItem('access_token');
+      if (existingToken && existingToken.startsWith('mock-jwt-token-')) {
+        console.warn('⚠️ Clearing existing mock token before login');
+        localStorage.removeItem('access_token');
+      }
+      
       const response = await apiClient.post<LoginResponse>(
         API_ENDPOINTS.AUTH.LOGIN,
         credentials,
         { requiresAuth: false }
       );
       
-      // Store token
-      setAccessToken(response.access_token);
+      // Store token - verify it's a real JWT token
+      if (response.access_token) {
+        // Verify it's not a mock token
+        if (response.access_token.startsWith('mock-jwt-token-')) {
+          console.error('❌ Server returned mock token! This should not happen.');
+          throw new Error('Invalid token received from server');
+        }
+        
+        setAccessToken(response.access_token);
+        console.log('✅ Authentication successful, real token stored:', {
+          hasToken: !!response.access_token,
+          tokenLength: response.access_token.length,
+          tokenPreview: response.access_token.substring(0, 30) + '...',
+          isJWT: response.access_token.split('.').length === 3
+        });
+      } else {
+        console.error('❌ No access_token in response:', response);
+        throw new Error('No access token received from server');
+      }
       
       return response;
-    } catch (error) {
-      // If API is not available, show better error message
-      throw new Error('Неверный email или пароль. Используйте тестовые данные: demo@sirius-dms.com / password');
+    } catch (error: any) {
+      console.error('Login error:', error);
+      throw new Error(error.message || 'Неверный email или пароль');
     }
   },
 
@@ -75,9 +81,11 @@ export const authService = {
   async getCurrentUser(): Promise<UserProfile> {
     const token = getAccessToken();
     
-    // If using mock token, return mock user
+    // If using mock token, clear it and throw error
     if (token && token.startsWith('mock-jwt-token-')) {
-      return MOCK_USER;
+      console.error('❌ Mock token detected! Clearing it...');
+      setAccessToken(null);
+      throw new Error('Invalid token. Please login again.');
     }
     
     return apiClient.get<UserProfile>(API_ENDPOINTS.AUTH.ME);

@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_BUCKET_NAME: str = "sirius-documents"
     MINIO_USE_SSL: bool = False
+    STORAGE_TOTAL_GB: float = 10.0  # Total storage limit in GB
     
     # JWT
     SECRET_KEY: str = "your-secret-key-change-in-production"
@@ -44,14 +45,16 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
-    # Qwen Model
+    # Qwen Model (Qwen3-4B используется для RAG эмбеддингов)
+    QWEN_MODEL_NAME: str = os.environ.get("QWEN_MODEL_NAME", "Qwen/Qwen3-4B")
     QWEN_MODEL_PATH: str = os.environ.get("QWEN_MODEL_PATH", str(Path(__file__).parent.parent.parent / "models"))
     QWEN_DEVICE: str = "auto"
     QWEN_LOAD_IN_8BIT: bool = False
     QWEN_LOAD_IN_4BIT: bool = False
     
     # RAG
-    RAG_EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    # Используется Qwen3-4B для генерации эмбеддингов (настроено через QWEN_MODEL_PATH)
+    RAG_EMBEDDING_MODEL: str = "qwen3-4b"  # Используется Qwen3-4B вместо SentenceTransformer
     RAG_TOP_K: int = 5
     RAG_CHUNK_SIZE: int = 500
     RAG_CHUNK_OVERLAP: int = 100

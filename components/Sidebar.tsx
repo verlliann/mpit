@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { ViewState } from '../types';
 import { GLASS_STYLES } from '../constants';
+import { analyticsService } from '../api/services/analytics';
+import { useApi } from '../hooks/useApi';
 
 interface SidebarProps {
   activeView: ViewState;
@@ -21,6 +23,14 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeView, onChangeView }) => {
+  // Get document count from API
+  const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('access_token');
+  const { data: metrics } = useApi(
+    () => analyticsService.getDashboardMetrics(),
+    { immediate: hasToken }
+  );
+  const documentCount = metrics?.total_documents || 0;
+  
   const NavItem = ({ view, icon: Icon, label, count }: { view: ViewState, icon: any, label: string, count?: number }) => (
     <button 
       onClick={() => onChangeView(view)}
@@ -57,7 +67,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onChangeView }) =>
         <div>
           <h3 className="text-xs font-bold text-indigo-900/50 uppercase tracking-widest mb-4 px-4">Меню</h3>
           <NavItem view="dashboard" icon={LayoutDashboard} label="Обзор" />
-          <NavItem view="library" icon={Files} label="Документы" count={1247} />
+          <NavItem view="library" icon={Files} label="Документы" count={documentCount} />
           <NavItem view="analytics" icon={PieChart} label="Аналитика" />
           <NavItem view="upload" icon={Upload} label="Загрузка" />
           <NavItem view="counterparties" icon={Users} label="Контрагенты" />

@@ -21,15 +21,16 @@ from app.models.user import User
 from app.models.document import Document, DocumentHistory
 from app.models.counterparty import Counterparty
 from app.services.document_processor import DocumentProcessor
-from app.services.qwen_service import qwen_service
-from app.services.rag_service import rag_service
+# RAG and Qwen temporarily disabled
+# from app.services.qwen_service import qwen_service
+# from app.services.rag_service import rag_service
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-processor = DocumentProcessor()
+# processor = DocumentProcessor()  # Not needed without RAG/Qwen
 
 
 class DocumentResponse(BaseModel):
@@ -254,9 +255,8 @@ async def upload_document(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Загрузка документа согласно архитектуре:
-    FastAPI → RAG → Qwen → (обратные метрики) → RAG → Postgres
-    Qwen → документы → Redis
+    Загрузка документа: напрямую в MinIO и метаданные в Postgres
+    RAG и Qwen временно отключены
     """
     import time
     start_time = time.time()
@@ -265,172 +265,91 @@ async def upload_document(
     file_data = await file.read()
     file_size = len(file_data)
     
-    # Save to temporary file for processing
-    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp_file:
-        tmp_file.write(file_data)
-        tmp_path = tmp_file.name
+    # Определяем параметры документа (без AI классификации)
+    doc_type = type or "document"
+    doc_priority = priority or "medium"
     
-    try:
-        # 1. FastAPI → RAG: обрабатываем документ
+    # Find counterparty if provided
+    counterparty_uuid = None
+    if counterparty_id:
         try:
-            text = processor.load_file(tmp_path)
-            pages = len(text.split('\n')) // 50 + 1
-        except Exception as e:
-            logger.error(f"Failed to load file: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Не удалось обработать файл: {str(e)}"
-            )
-        
-        # 2. RAG обрабатывает документ и передает метрики в Qwen
-        try:
-            metrics = await rag_service.process_document_for_metrics(
-                text=text,
-                filename=file.filename or "untitled",
-                file_size=file_size
-            )
-        except Exception as e:
-            logger.error(f"RAG processing failed: {e}")
-            # Fallback: create basic metrics
-            metrics = {
-                "text": text[:1000],  # First 1000 chars
-                "filename": file.filename or "untitled",
-                "file_size": file_size
-            }
-        
-        # 3. Qwen классифицирует метрики и формирует обратные метрики
-        try:
-            reverse_metrics = await qwen_service.classify_metrics_from_rag(metrics)
-            classification = reverse_metrics.get("classification", {})
-        except Exception as e:
-            logger.warning(f"Qwen classification failed (using fallback): {e}")
-            # Fallback classification
-            classification = {
-                "type": type or "scan",
-                "priority": priority or "medium",
-                "description": "",
-                "counterparty_name": None
-            }
-        
-        # 4. Определяем параметры документа из классификации
-        doc_type = type or classification.get("type", "scan")
-        doc_priority = priority or classification.get("priority", "medium")
-        doc_description = classification.get("description", "")
-        
-        # Find or create counterparty
-        counterparty_uuid = None
-        if counterparty_id:
             counterparty_uuid = uuid.UUID(counterparty_id)
-        elif classification.get("counterparty_name"):
-            result = await db.execute(
-                select(Counterparty).where(Counterparty.name.ilike(f"%{classification['counterparty_name']}%"))
-            )
-            existing_cp = result.scalar_one_or_none()
-            if existing_cp:
-                counterparty_uuid = existing_cp.id
-        
-        # Generate S3 path (MinIO)
-        now = datetime.now()
-        s3_path = f"{doc_type}s/{now.year}/{now.month:02d}/{uuid.uuid4()}{Path(file.filename).suffix}"
-        
-        # Upload to MinIO
+        except ValueError:
+            logger.warning(f"Invalid counterparty_id: {counterparty_id}")
+    
+    # Generate S3 path (MinIO)
+    now = datetime.now()
+    file_ext = Path(file.filename).suffix if file.filename else ""
+    s3_path = f"{doc_type}s/{now.year}/{now.month:02d}/{uuid.uuid4()}{file_ext}"
+    
+    # Upload to MinIO
+    try:
         upload_file(file_data, s3_path, file.content_type or "application/octet-stream")
-        
-        # Create document record
-        document = Document(
-            id=uuid.uuid4(),
-            title=title or file.filename or "Untitled",
-            type=doc_type,
-            counterparty_id=counterparty_uuid,
-            date=classification.get("date") or now.date(),
-            priority=doc_priority,
-            status="processed",
-            pages=pages,
-            department=department,
-            size=f"{file_size / 1024 / 1024:.2f} MB",
-            size_bytes=file_size,
-            uploaded_by=current_user.id,
-            path=s3_path,
-            description=doc_description,
-            tags=json.loads(tags) if tags else [],
-            processing_time_minutes=(time.time() - start_time) / 60
-        )
-        
-        db.add(document)
-        
-        # Add history
-        history = DocumentHistory(
-            id=uuid.uuid4(),
-            document_id=document.id,
-            user_id=current_user.id,
-            action="Документ загружен",
-            type="success"
-        )
-        db.add(history)
-        
-        await db.commit()
-        await db.refresh(document)
-        
-        # 5. RAG сохраняет обратные метрики в Postgres
-        try:
-            await rag_service.save_metrics_to_postgres(
-                db=db,
-                document_id=str(document.id),
-                metrics=metrics,
-                classification_result=classification
-            )
-        except Exception as e:
-            logger.warning(f"Failed to save metrics to Postgres: {e}")
-        
-        # 6. Qwen сохраняет документ в Redis
-        try:
-            await qwen_service.save_document_to_redis(
-                document_id=str(document.id),
-                file_data=file_data,
-                chunk_metadata={
-                    "title": document.title,
-                    "type": document.type,
-                    "filename": file.filename,
-                    "path": s3_path,
-                    "size": file_size
-                }
-            )
-        except Exception as e:
-            logger.warning(f"Failed to save document to Redis: {e}")
-        
-        # Generate presigned URL
-        try:
-            presigned_url = get_presigned_url(s3_path)
-        except Exception as e:
-            logger.warning(f"Failed to generate presigned URL: {e}")
-            presigned_url = None
-        
-        return {
-            "document": {
-                "id": str(document.id),
-                "title": document.title,
-                "type": document.type,
-                "status": document.status,
-                "path": document.path
-            },
-            "upload_url": presigned_url
-        }
-        
-    except HTTPException:
-        raise
+        logger.info(f"✅ File uploaded to MinIO: {s3_path}")
     except Exception as e:
-        logger.error(f"Error uploading document: {e}", exc_info=True)
+        logger.error(f"❌ Failed to upload to MinIO: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при загрузке документа: {str(e)}"
+            detail=f"Не удалось загрузить файл в хранилище: {str(e)}"
         )
-    finally:
-        # Cleanup temp file
-        if os.path.exists(tmp_path):
-            try:
-                os.unlink(tmp_path)
-            except Exception as e:
-                logger.warning(f"Failed to cleanup temp file: {e}")
+    
+    # Calculate pages (rough estimate for PDFs)
+    pages = 1
+    if file_ext.lower() == '.pdf':
+        pages = max(1, file_size // 50000)  # Rough estimate: ~50KB per page
+    
+    # Create document record in Postgres
+    document = Document(
+        id=uuid.uuid4(),
+        title=title or file.filename or "Untitled",
+        type=doc_type,
+        counterparty_id=counterparty_uuid,
+        date=now.date(),
+        priority=doc_priority,
+        status="processed",
+        pages=pages,
+        department=department,
+        size=f"{file_size / 1024 / 1024:.2f} MB",
+        size_bytes=file_size,
+        uploaded_by=current_user.id,
+        path=s3_path,
+        description="",
+        tags=json.loads(tags) if tags else [],
+        processing_time_minutes=(time.time() - start_time) / 60
+    )
+    
+    db.add(document)
+    
+    # Add history
+    history = DocumentHistory(
+        id=uuid.uuid4(),
+        document_id=document.id,
+        user_id=current_user.id,
+        action="Документ загружен",
+        type="success"
+    )
+    db.add(history)
+    
+    await db.commit()
+    await db.refresh(document)
+    
+    # Generate presigned URL
+    try:
+        presigned_url = get_presigned_url(s3_path)
+    except Exception as e:
+        logger.warning(f"Failed to generate presigned URL: {e}")
+        presigned_url = None
+    
+    return {
+        "document": {
+            "id": str(document.id),
+            "title": document.title,
+            "type": document.type,
+            "status": document.status,
+            "path": document.path
+        },
+        "upload_url": presigned_url
+    }
 
 
 @router.get("/{document_id}/download")
@@ -469,15 +388,47 @@ async def search_documents(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Семантический поиск согласно архитектуре:
-    FastAPI → Qwen → RAG → Postgres → Qwen → Redis → ответ
+    Простой поиск по метаданным документов (без RAG/Qwen)
     """
-    # Qwen обрабатывает поисковый запрос
-    search_result = await qwen_service.process_search_query(
-        query=query,
-        rag_service=rag_service,
-        db=db
+    # Простой поиск по названию, типу, тегам
+    search_query = select(Document).where(
+        Document.uploaded_by == current_user.id,
+        Document.is_deleted == False,
+        Document.is_archived == False
     )
+    
+    # Simple text search in title
+    if query:
+        search_query = search_query.where(
+            Document.title.ilike(f"%{query}%")
+        )
+    
+    result = await db.execute(search_query.offset((page - 1) * limit).limit(limit))
+    documents = result.scalars().all()
+    
+    total_result = await db.execute(
+        select(func.count(Document.id)).where(
+            Document.uploaded_by == current_user.id,
+            Document.is_deleted == False,
+            Document.is_archived == False,
+            Document.title.ilike(f"%{query}%") if query else True
+        )
+    )
+    total = total_result.scalar() or 0
+    
+    search_result = {
+        "answer": f"Найдено документов: {total}",
+        "documents": [
+            {
+                "id": str(doc.id),
+                "title": doc.title,
+                "type": doc.type,
+                "created_at": doc.created_at.isoformat() if doc.created_at else None
+            }
+            for doc in documents
+        ],
+        "total": total
+    }
     
     # Фильтруем документы по пользователю
     user_documents = []
@@ -560,7 +511,8 @@ async def delete_document(
     if permanent:
         # Permanently delete
         delete_file(doc.path)
-        await rag_service.delete_document_chunks(db, document_id)
+        # RAG chunks deletion disabled
+        # await rag_service.delete_document_chunks(db, document_id)
         await db.delete(doc)
     else:
         # Move to trash
