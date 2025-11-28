@@ -24,6 +24,7 @@ export const chatService = {
   async streamMessage(
     message: string,
     onChunk: (chunk: string) => void,
+    onDocuments?: (documents: Array<any>) => void,
     context?: string
   ): Promise<void> {
     const url = `${apiClient['baseURL']}${API_ENDPOINTS.CHAT.STREAM}`;
@@ -67,6 +68,9 @@ export const chatService = {
               const parsed = JSON.parse(data);
               if (parsed.content) {
                 onChunk(parsed.content);
+              }
+              if (parsed.documents && onDocuments) {
+                onDocuments(parsed.documents);
               }
             } catch {
               // Skip invalid JSON

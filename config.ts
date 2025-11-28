@@ -19,7 +19,7 @@ const getBaseURL = () => {
 
 export const API_CONFIG = {
   BASE_URL: getBaseURL(),
-  TIMEOUT: 30000, // 30 seconds
+  TIMEOUT: 300000, // 5 minutes для загрузки документов с обработкой моделями
   HEADERS: {
     'Content-Type': 'application/json',
   },

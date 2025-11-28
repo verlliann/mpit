@@ -1,7 +1,7 @@
 """
 Documents endpoints
 """
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_
 from sqlalchemy.orm import selectinload
@@ -14,23 +14,22 @@ import os
 import json
 from pathlib import Path
 
-from app.core.database import get_db
+from app.core.database import get_db, AsyncSessionLocal
 from app.core.dependencies import get_current_user
 from app.core.storage import upload_file, download_file, delete_file, get_presigned_url
 from app.models.user import User
 from app.models.document import Document, DocumentHistory
 from app.models.counterparty import Counterparty
 from app.services.document_processor import DocumentProcessor
-# RAG and Qwen temporarily disabled
-# from app.services.qwen_service import qwen_service
-# from app.services.rag_service import rag_service
+from app.services.qwen_service import qwen_service
+from app.services.rag_service import rag_service
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# processor = DocumentProcessor()  # Not needed without RAG/Qwen
+processor = DocumentProcessor()
 
 
 class DocumentResponse(BaseModel):
@@ -251,12 +250,13 @@ async def upload_document(
     priority: Optional[str] = Form(None),
     department: Optional[str] = Form(None),
     tags: Optional[str] = Form(None),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Загрузка документа: напрямую в MinIO и метаданные в Postgres
-    RAG и Qwen временно отключены
+    Загрузка документа с обработкой через RAG и Qwen
+    Архитектура: Файл → MinIO → DocumentProcessor → RAG → Qwen → Postgres/Redis
     """
     import time
     start_time = time.time()
@@ -264,10 +264,6 @@ async def upload_document(
     # Read file
     file_data = await file.read()
     file_size = len(file_data)
-    
-    # Определяем параметры документа (без AI классификации)
-    doc_type = type or "document"
-    doc_priority = priority or "medium"
     
     # Find counterparty if provided
     counterparty_uuid = None
@@ -280,9 +276,10 @@ async def upload_document(
     # Generate S3 path (MinIO)
     now = datetime.now()
     file_ext = Path(file.filename).suffix if file.filename else ""
-    s3_path = f"{doc_type}s/{now.year}/{now.month:02d}/{uuid.uuid4()}{file_ext}"
+    doc_id = uuid.uuid4()
+    s3_path = f"documents/{now.year}/{now.month:02d}/{doc_id}{file_ext}"
     
-    # Upload to MinIO
+    # Upload to MinIO first
     try:
         upload_file(file_data, s3_path, file.content_type or "application/octet-stream")
         logger.info(f"✅ File uploaded to MinIO: {s3_path}")
@@ -293,28 +290,96 @@ async def upload_document(
             detail=f"Не удалось загрузить файл в хранилище: {str(e)}"
         )
     
-    # Calculate pages (rough estimate for PDFs)
+    # Extract text from document using DocumentProcessor
+    extracted_text = ""
     pages = 1
-    if file_ext.lower() == '.pdf':
-        pages = max(1, file_size // 50000)  # Rough estimate: ~50KB per page
+    try:
+        # Save to temp file for processing
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
+            tmp_file.write(file_data)
+            tmp_path = tmp_file.name
+        
+        try:
+            extracted_text = processor.load_file(tmp_path)
+            # Calculate pages from extracted text or file
+            if file_ext.lower() == '.pdf':
+                # Try to get actual page count
+                try:
+                    import pdfplumber
+                    with pdfplumber.open(tmp_path) as pdf:
+                        pages = len(pdf.pages)
+                except:
+                    pages = max(1, file_size // 50000)
+            else:
+                # Estimate pages from text length
+                pages = max(1, len(extracted_text) // 2000)
+        finally:
+            os.unlink(tmp_path)
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to extract text from document: {e}")
+        extracted_text = title or file.filename or "Untitled"
+        pages = 1
+    
+    # RAG: обрабатываем документ и получаем метрики
+    try:
+        metrics = await rag_service.process_document_for_metrics(
+            text=extracted_text,
+            filename=file.filename or "document",
+            file_size=file_size
+        )
+        logger.info("✅ RAG обработал документ")
+    except Exception as e:
+        logger.error(f"❌ RAG processing failed: {e}")
+        metrics = {
+            "text": extracted_text,
+            "filename": file.filename or "document",
+            "file_size": file_size,
+            "text_length": len(extracted_text),
+            "chunks_count": 0,
+            "chunks": []
+        }
+    
+    # Qwen: классифицируем документ
+    try:
+        classification = qwen_service.classify_document(
+            text=extracted_text,
+            filename=file.filename or "document"
+        )
+        logger.info("✅ Qwen классифицировал документ")
+        
+        # Используем результаты классификации
+        doc_type = type or classification.get("type", "document")
+        doc_priority = priority or classification.get("priority", "medium")
+        doc_description = classification.get("description", "") or ""
+        doc_tags = json.loads(tags) if tags else []
+        if classification.get("tags"):
+            if isinstance(classification.get("tags"), list):
+                doc_tags.extend(classification.get("tags", []))
+    except Exception as e:
+        logger.error(f"❌ Qwen classification failed: {e}")
+        doc_type = type or "document"
+        doc_priority = priority or "medium"
+        doc_description = ""
+        doc_tags = json.loads(tags) if tags else []
+        classification = {}
     
     # Create document record in Postgres
     document = Document(
-        id=uuid.uuid4(),
-        title=title or file.filename or "Untitled",
+        id=doc_id,
+        title=title or classification.get("title") or file.filename or "Untitled",
         type=doc_type,
         counterparty_id=counterparty_uuid,
         date=now.date(),
         priority=doc_priority,
         status="processed",
         pages=pages,
-        department=department,
+        department=department or classification.get("department"),
         size=f"{file_size / 1024 / 1024:.2f} MB",
         size_bytes=file_size,
         uploaded_by=current_user.id,
         path=s3_path,
-        description="",
-        tags=json.loads(tags) if tags else [],
+        description=doc_description,
+        tags=doc_tags,
         processing_time_minutes=(time.time() - start_time) / 60
     )
     
@@ -325,22 +390,25 @@ async def upload_document(
         id=uuid.uuid4(),
         document_id=document.id,
         user_id=current_user.id,
-        action="Документ загружен",
+        action="Документ загружен и обработан",
         type="success"
     )
     db.add(history)
     
-    await db.commit()
-    await db.refresh(document)
-    
-    # Generate presigned URL
     try:
-        presigned_url = get_presigned_url(s3_path)
+        await db.commit()
+        await db.refresh(document)
+        logger.info(f"✅ Документ сохранен в Postgres: {document.id}")
     except Exception as e:
-        logger.warning(f"Failed to generate presigned URL: {e}")
-        presigned_url = None
+        await db.rollback()
+        logger.error(f"❌ Ошибка при сохранении документа в Postgres: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Не удалось сохранить документ в базу данных: {str(e)}"
+        )
     
-    return {
+    # Формируем ответ ДО фоновых операций
+    response_data = {
         "document": {
             "id": str(document.id),
             "title": document.title,
@@ -348,8 +416,60 @@ async def upload_document(
             "status": document.status,
             "path": document.path
         },
-        "upload_url": presigned_url
+        "upload_url": None  # Будет сгенерирован в фоне
     }
+    
+    # Добавляем фоновые задачи (выполнятся ПОСЛЕ отправки ответа)
+    async def background_save_rag_metrics():
+        """Фоновая задача для сохранения RAG метрик"""
+        try:
+            # Создаем новую сессию для фоновой задачи
+            async with AsyncSessionLocal() as bg_db:
+                await rag_service.save_metrics_to_postgres(
+                    db=bg_db,
+                    document_id=str(document.id),
+                    metrics=metrics,
+                    classification_result=classification
+                )
+            logger.info("✅ RAG сохранил метрики в Postgres (фоновая задача)")
+        except Exception as e:
+            logger.error(f"❌ Failed to save RAG metrics (фоновая задача): {e}")
+    
+    async def background_save_redis():
+        """Фоновая задача для сохранения в Redis"""
+        try:
+            await qwen_service.save_document_to_redis(
+                document_id=str(document.id),
+                file_data=file_data,
+                metadata={
+                    "id": str(document.id),
+                    "title": document.title,
+                    "type": document.type,
+                    "text": extracted_text,
+                    "path": s3_path,
+                    "classification": classification
+                }
+            )
+            logger.info("✅ Qwen сохранил документ в Redis (фоновая задача)")
+        except Exception as e:
+            logger.error(f"❌ Failed to save document to Redis (фоновая задача): {e}")
+    
+    async def background_generate_url():
+        """Фоновая задача для генерации presigned URL"""
+        try:
+            presigned_url = get_presigned_url(s3_path)
+            # Обновить URL в документе можно через отдельный endpoint
+            logger.info("✅ Presigned URL сгенерирован (фоновая задача)")
+        except Exception as e:
+            logger.warning(f"Failed to generate presigned URL (фоновая задача): {e}")
+    
+    # Добавляем задачи в фон
+    background_tasks.add_task(background_save_rag_metrics)
+    background_tasks.add_task(background_save_redis)
+    background_tasks.add_task(background_generate_url)
+    
+    logger.info(f"✅ Отправляю ответ на фронт для документа {document.id} (фоновые задачи запущены)")
+    return response_data
 
 
 @router.get("/{document_id}/download")
@@ -388,77 +508,104 @@ async def search_documents(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Простой поиск по метаданным документов (без RAG/Qwen)
+    Семантический поиск документов через RAG и Qwen
     """
-    # Простой поиск по названию, типу, тегам
-    search_query = select(Document).where(
-        Document.uploaded_by == current_user.id,
-        Document.is_deleted == False,
-        Document.is_archived == False
-    )
-    
-    # Simple text search in title
-    if query:
-        search_query = search_query.where(
-            Document.title.ilike(f"%{query}%")
+    try:
+        # Используем RAG для семантического поиска
+        chunks = await rag_service.search_similar_chunks(
+            db=db,
+            query=query,
+            top_k=limit * 2,  # Получаем больше для фильтрации по пользователю
+            document_ids=None
         )
-    
-    result = await db.execute(search_query.offset((page - 1) * limit).limit(limit))
-    documents = result.scalars().all()
-    
-    total_result = await db.execute(
-        select(func.count(Document.id)).where(
+        
+        # Фильтруем по пользователю и получаем уникальные документы
+        user_document_ids = set()
+        user_documents_map = {}
+        
+        for chunk in chunks:
+            doc_id = chunk.get("document_id")
+            if doc_id and doc_id not in user_document_ids:
+                # Проверяем, что документ принадлежит пользователю
+                result = await db.execute(
+                    select(Document)
+                    .where(Document.id == uuid.UUID(doc_id))
+                    .where(Document.uploaded_by == current_user.id)
+                    .where(Document.is_deleted == False)
+                    .where(Document.is_archived == False)
+                )
+                doc = result.scalar_one_or_none()
+                if doc:
+                    user_document_ids.add(doc_id)
+                    user_documents_map[doc_id] = {
+                        "id": str(doc.id),
+                        "title": doc.title,
+                        "type": doc.type,
+                        "created_at": doc.created_at.isoformat() if doc.created_at else None,
+                        "similarity": chunk.get("similarity", 0.0)
+                    }
+        
+        # Сортируем по similarity и берем нужное количество
+        user_documents = sorted(
+            user_documents_map.values(),
+            key=lambda x: x.get("similarity", 0.0),
+            reverse=True
+        )[:limit]
+        
+        total = len(user_documents)
+        
+        return {
+            "items": user_documents,
+            "answer": f"Найдено документов: {total}",
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "pages": (total + limit - 1) // limit
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Semantic search failed: {e}, falling back to simple search")
+        # Fallback to simple search
+        search_query = select(Document).where(
             Document.uploaded_by == current_user.id,
             Document.is_deleted == False,
-            Document.is_archived == False,
-            Document.title.ilike(f"%{query}%") if query else True
+            Document.is_archived == False
         )
-    )
-    total = total_result.scalar() or 0
-    
-    search_result = {
-        "answer": f"Найдено документов: {total}",
-        "documents": [
-            {
-                "id": str(doc.id),
-                "title": doc.title,
-                "type": doc.type,
-                "created_at": doc.created_at.isoformat() if doc.created_at else None
-            }
-            for doc in documents
-        ],
-        "total": total
-    }
-    
-    # Фильтруем документы по пользователю
-    user_documents = []
-    for doc_info in search_result.get("documents", []):
-        doc_id = doc_info.get("document_id")
-        if doc_id:
-            result = await db.execute(
-                select(Document)
-                .where(Document.id == uuid.UUID(doc_id))
-                .where(Document.uploaded_by == current_user.id)
-                .where(Document.is_deleted == False)
+        
+        if query:
+            search_query = search_query.where(
+                Document.title.ilike(f"%{query}%")
             )
-            doc = result.scalar_one_or_none()
-            if doc:
-                user_documents.append({
+        
+        result = await db.execute(search_query.offset((page - 1) * limit).limit(limit))
+        documents = result.scalars().all()
+        
+        total_result = await db.execute(
+            select(func.count(Document.id)).where(
+                Document.uploaded_by == current_user.id,
+                Document.is_deleted == False,
+                Document.is_archived == False,
+                Document.title.ilike(f"%{query}%") if query else True
+            )
+        )
+        total = total_result.scalar() or 0
+        
+        return {
+            "items": [
+                {
                     "id": str(doc.id),
                     "title": doc.title,
                     "type": doc.type,
-                    "answer": search_result.get("answer", ""),
-                    "available": doc_info.get("available", False)
-                })
-    
-    return {
-        "items": user_documents[:limit],
-        "answer": search_result.get("answer", ""),
-        "total": len(user_documents),
-        "page": page,
-        "limit": limit,
-        "pages": (len(user_documents) + limit - 1) // limit
-    }
+                    "created_at": doc.created_at.isoformat() if doc.created_at else None
+                }
+                for doc in documents
+            ],
+            "answer": f"Найдено документов: {total}",
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "pages": (total + limit - 1) // limit
+        }
 
 
 @router.patch("/{document_id}")
@@ -511,8 +658,8 @@ async def delete_document(
     if permanent:
         # Permanently delete
         delete_file(doc.path)
-        # RAG chunks deletion disabled
-        # await rag_service.delete_document_chunks(db, document_id)
+        # Delete RAG chunks
+        await rag_service.delete_document_chunks(db, document_id)
         await db.delete(doc)
     else:
         # Move to trash

@@ -16,6 +16,9 @@ from app.services.qwen_service import qwen_service
 from app.services.rag_service import rag_service
 from app.core.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -133,13 +136,19 @@ async def stream_message(
             yield "data: [DONE]\n\n"
             return
         
-        # Similar to send_message but with streaming
-        chunks = await rag_service.search_similar_chunks(db, request.message, top_k=3)
+        # Используем process_search_query для получения всех документов
+        search_result = await qwen_service.process_search_query(
+            query=request.message,
+            rag_service=rag_service,
+            db=db
+        )
         
+        # Формируем контекст из всех найденных чанков
+        chunks = search_result.get("chunks", [])
         context_parts = []
         if chunks:
-            for chunk in chunks:
-                context_parts.append(f"- {chunk['document_title']}: {chunk['text'][:200]}")
+            for chunk in chunks[:10]:  # Используем топ-10 для контекста
+                context_parts.append(f"- {chunk['document_title']}: {chunk['text'][:300]}")
         
         context = "\n".join(context_parts) if context_parts else "Нет релевантных документов."
         
@@ -149,16 +158,26 @@ async def stream_message(
 Ответь на вопрос."""
         
         # Generate response in chunks
-        response = qwen_service._generate_text(
-            prompt=prompt,
-            max_new_tokens=512,
-            temperature=0.7
-        )
+        try:
+            response = qwen_service._generate_text(
+                prompt=prompt,
+                max_new_tokens=512,
+                temperature=0.7
+            )
+        except Exception as e:
+            logger.error(f"❌ Ошибка при генерации ответа: {e}")
+            response = f"Найдено {len(chunks)} релевантных документов. Извините, не удалось сформировать ответ. Попробуйте переформулировать вопрос."
         
         # Stream response word by word
         words = response.split()
         for word in words:
             yield f"data: {json.dumps({'content': word + ' '})}\n\n"
+        
+        # В конце отправляем информацию о документах
+        documents = search_result.get("documents", [])
+        if documents:
+            yield f"data: {json.dumps({'documents': documents})}\n\n"
+        
         yield "data: [DONE]\n\n"
     
     return StreamingResponse(generate(), media_type="text/event-stream")

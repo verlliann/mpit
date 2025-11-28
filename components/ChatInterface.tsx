@@ -9,6 +9,13 @@ interface Message {
   role: 'user' | 'model';
   text: string;
   timestamp: Date;
+  documents?: Array<{
+    document_id: string;
+    title: string;
+    type: string;
+    path?: string;
+    available: boolean;
+  }>;
 }
 
 export const ChatInterface: React.FC = () => {
@@ -59,6 +66,8 @@ export const ChatInterface: React.FC = () => {
           }]);
 
       // Use streaming API
+      let documents: Array<any> = [];
+      
       await chatService.streamMessage(
         messageText,
         (chunk: string) => {
@@ -68,7 +77,17 @@ export const ChatInterface: React.FC = () => {
             }
             return msg;
           }));
-      }
+        },
+        (docs: Array<any>) => {
+          documents = docs;
+          // Обновляем сообщение с документами
+          setMessages(prev => prev.map(msg => {
+            if (msg.id === modelMessageId) {
+              return { ...msg, documents: docs };
+            }
+            return msg;
+          }));
+        }
       );
 
     } catch (error: any) {
@@ -139,6 +158,28 @@ export const ChatInterface: React.FC = () => {
                 }`}
               >
                 {msg.text}
+                
+                {/* Отображаем документы, если они есть */}
+                {!isUser && msg.documents && msg.documents.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-slate-200/50">
+                    <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide">
+                      Найдено документов: {msg.documents.length}
+                    </p>
+                    <div className="space-y-2">
+                      {msg.documents.map((doc: any, idx: number) => (
+                        <div 
+                          key={doc.document_id || idx}
+                          className="text-xs bg-indigo-50/50 border border-indigo-100 rounded-lg p-2.5 hover:bg-indigo-100/50 transition-colors"
+                        >
+                          <div className="font-semibold text-indigo-900">{doc.title}</div>
+                          <div className="text-indigo-600 mt-0.5">
+                            {doc.type} {doc.available ? '✓' : ''}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {isUser && (

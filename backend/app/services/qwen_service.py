@@ -106,21 +106,43 @@ class QwenService:
         
         try:
             logger.info("📥 Загрузка токенизатора...")
-            self._tokenizer = AutoTokenizer.from_pretrained(
-                model_name,
-                trust_remote_code=True
-            )
+            # Для Qwen3 используем Qwen2Tokenizer (Qwen3 использует тот же токенизатор)
+            try:
+                from transformers import Qwen2Tokenizer
+                logger.info("Используем Qwen2Tokenizer для Qwen3 модели...")
+                self._tokenizer = Qwen2Tokenizer.from_pretrained(
+                    model_name,
+                    trust_remote_code=True
+                )
+            except (ImportError, Exception) as tokenizer_error:
+                logger.warning(f"⚠️ Qwen2Tokenizer недоступен ({tokenizer_error}), пробуем AutoTokenizer...")
+                # Fallback на AutoTokenizer
+                self._tokenizer = AutoTokenizer.from_pretrained(
+                    model_name,
+                    trust_remote_code=True
+                )
             
             logger.info("📥 Загрузка модели (это может занять время)...")
-            self._model = AutoModelForCausalLM.from_pretrained(
-                model_name,
-                **model_kwargs
-            )
+            try:
+                self._model = AutoModelForCausalLM.from_pretrained(
+                    model_name,
+                    **model_kwargs
+                )
+            except Exception as model_error:
+                logger.error(f"❌ Ошибка при загрузке модели: {model_error}")
+                # Если модель не загрузилась, но токенизатор загружен, 
+                # устанавливаем модель в None для использования fallback
+                logger.warning("⚠️ Модель не загружена, будет использован fallback режим")
+                self._model = None
+                if self._tokenizer:
+                    if self._tokenizer.pad_token is None:
+                        self._tokenizer.pad_token = self._tokenizer.eos_token
+                return  # Выходим, модель будет None, но токенизатор загружен
             
             # Explicitly move model to device if CPU
             if device == "cpu":
                 self._model = self._model.to("cpu")
-                self._model.eval()  # Set to evaluation mode
+            self._model.eval()  # Set to evaluation mode
             
             if self._tokenizer.pad_token is None:
                 self._tokenizer.pad_token = self._tokenizer.eos_token
@@ -129,7 +151,11 @@ class QwenService:
             
         except Exception as e:
             logger.error(f"❌ Ошибка при загрузке модели: {e}")
-            raise
+            # Устанавливаем модель в None для fallback режима
+            self._model = None
+            if self._tokenizer and self._tokenizer.pad_token is None:
+                self._tokenizer.pad_token = self._tokenizer.eos_token
+            logger.warning("⚠️ Модель не загружена, будет использован fallback режим (классификация по ключевым словам)")
     
     def _get_best_device(self) -> str:
         """Get best available device"""
@@ -339,9 +365,11 @@ class QwenService:
         try:
             # Qwen обращается к RAG
             logger.info(f"Qwen обрабатывает поисковый запрос: {query}")
+            logger.info(f"🔍 Qwen → RAG → Postgres: начинаю поиск документов...")
             
-            # RAG обращается к Postgres
-            chunks = await rag_service.search_for_qwen(db, query, top_k=5)
+            # RAG обращается к Postgres - увеличиваем top_k для получения всех релевантных документов
+            chunks = await rag_service.search_for_qwen(db, query, top_k=20)
+            logger.info(f"✅ RAG → Postgres: найдено {len(chunks)} чанков")
             
             if not chunks:
                 return {
@@ -350,10 +378,10 @@ class QwenService:
                     "chunks": []
                 }
             
-            # Формируем контекст для ответа
+            # Формируем контекст для ответа (используем больше чанков для лучшего контекста)
             context = "\n\n".join([
-                f"Документ: {chunk['document_title']}\n{chunk['text'][:200]}"
-                for chunk in chunks[:3]
+                f"Документ: {chunk['document_title']}\n{chunk['text'][:300]}"
+                for chunk in chunks[:10]  # Используем топ-10 чанков для контекста
             ])
             
             # Генерируем ответ на основе контекста
@@ -372,25 +400,46 @@ class QwenService:
                 temperature=0.7
             )
             
-            # Получаем документы из Redis
+            # Собираем ВСЕ уникальные документы из всех релевантных чанков
+            seen_doc_ids = set()
             documents = []
-            for chunk in chunks[:3]:  # Берем топ-3 документа
-                doc_id = chunk["document_id"]
-                doc_data = await self.get_document_from_redis(doc_id)
-                if doc_data:
-                    documents.append({
-                        "document_id": doc_id,
-                        "title": chunk["document_title"],
-                        "type": chunk["document_type"],
-                        "path": chunk.get("document_path"),
-                        "available": True
-                    })
             
-            logger.info(f"✅ Qwen сформировал ответ на запрос, найдено {len(documents)} документов")
+            # Проходим по всем чанкам и собираем уникальные документы
+            for chunk in chunks:
+                doc_id = chunk["document_id"]
+                
+                # Пропускаем, если уже добавили этот документ
+                if doc_id in seen_doc_ids:
+                    continue
+                
+                seen_doc_ids.add(doc_id)
+                
+                # Пытаемся получить из Redis
+                logger.debug(f"🔍 Qwen → Redis: проверяю документ {doc_id}")
+                doc_data = await self.get_document_from_redis(doc_id)
+                
+                # Добавляем документ (даже если нет в Redis, используем данные из чанка)
+                documents.append({
+                    "document_id": doc_id,
+                    "title": chunk["document_title"],
+                    "type": chunk["document_type"],
+                    "path": chunk.get("document_path"),
+                    "available": doc_data is not None,
+                    "similarity": chunk.get("similarity", 0.0)  # Добавляем similarity для сортировки
+                })
+                if doc_data:
+                    logger.debug(f"✅ Qwen → Redis: документ {doc_id} найден в Redis")
+                else:
+                    logger.debug(f"⚠️ Qwen → Redis: документ {doc_id} не найден в Redis (используем данные из Postgres)")
+            
+            # Сортируем документы по similarity (релевантности)
+            documents.sort(key=lambda x: x.get("similarity", 0.0), reverse=True)
+            
+            logger.info(f"✅ Qwen сформировал ответ на запрос, найдено {len(documents)} уникальных документов из {len(chunks)} чанков")
             
             return {
                 "answer": answer,
-                "documents": documents,
+                "documents": documents,  # Возвращаем ВСЕ найденные документы
                 "chunks": chunks,
                 "query": query
             }
@@ -424,6 +473,10 @@ class QwenService:
             raise RuntimeError("Model not loaded")
         
         try:
+            # Всегда используем CPU для генерации, чтобы избежать проблем с MPS
+            original_device = next(self._model.parameters()).device
+            model_on_cpu = self._model.to("cpu")
+            
             inputs = self._tokenizer(
                 prompt,
                 return_tensors="pt",
@@ -432,14 +485,11 @@ class QwenService:
                 max_length=2048
             )
             
-            device = self._get_best_device()
-            # Move inputs to device if not CPU
-            if device != "cpu":
-                inputs = {k: v.to(device) for k, v in inputs.items()}
-            # For CPU, inputs stay on CPU (default)
+            # Inputs всегда на CPU
+            inputs = {k: v.to("cpu") for k, v in inputs.items()}
             
             with torch.no_grad():
-                outputs = self._model.generate(
+                outputs = model_on_cpu.generate(
                     **inputs,
                     max_new_tokens=max_new_tokens,
                     temperature=temperature,
@@ -448,6 +498,9 @@ class QwenService:
                     pad_token_id=self._tokenizer.pad_token_id,
                     eos_token_id=self._tokenizer.eos_token_id
                 )
+            
+            # Возвращаем модель на исходное устройство
+            self._model = model_on_cpu.to(original_device)
             
             generated_text = self._tokenizer.decode(
                 outputs[0],

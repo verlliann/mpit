@@ -60,40 +60,30 @@ class RAGService:
             )
             
             device = self._qwen_service._get_best_device()
-            if device != "cpu":
-                inputs = {k: v.to(device) for k, v in inputs.items()}
             
-            # Получаем скрытые состояния модели
+            # Для генерации эмбеддингов всегда используем CPU, чтобы избежать проблем с MPS
+            # MPS может иметь проблемы с некоторыми операциями (например, register_pytree_node)
+            # Поэтому для стабильности используем CPU для эмбеддингов
+            inputs_cpu = {k: v.to("cpu") for k, v in inputs.items()}
+            
+            # Получаем скрытые состояния модели на CPU
             with torch.no_grad():
-                outputs = model(**inputs, output_hidden_states=True)
-                # Используем последний слой скрытых состояний
-                hidden_states = outputs.hidden_states[-1]  # [batch_size, seq_len, hidden_size]
+                # Временно перемещаем модель на CPU для генерации эмбеддингов
+                original_device = next(model.parameters()).device
+                model_cpu = model.to("cpu")
                 
-                # Применяем mean pooling для получения эмбеддинга
-                # Учитываем attention mask для правильного усреднения
-                attention_mask = inputs.get('attention_mask', None)
-                if attention_mask is not None:
-                    # Расширяем mask для правильной формы
-                    mask_expanded = attention_mask.unsqueeze(-1).expand(hidden_states.size()).float()
-                    # Суммируем скрытые состояния с учетом mask
-                    sum_hidden = torch.sum(hidden_states * mask_expanded, dim=1)
-                    # Суммируем mask для нормализации
-                    sum_mask = torch.clamp(mask_expanded.sum(dim=1), min=1e-9)
-                    # Усредняем
-                    embedding = sum_hidden / sum_mask
-                else:
-                    # Если нет mask, просто усредняем по длине последовательности
-                    embedding = torch.mean(hidden_states, dim=1)
-                
-                # Конвертируем в numpy
-                embedding_np = embedding.cpu().numpy().flatten()
-                
-                # Нормализуем эмбеддинг (L2 нормализация)
-                norm = np.linalg.norm(embedding_np)
-                if norm > 0:
-                    embedding_np = embedding_np / norm
-                
-                return embedding_np.astype(np.float32)
+                try:
+                    outputs = model_cpu(**inputs_cpu, output_hidden_states=True)
+                finally:
+                    # Возвращаем модель на исходное устройство
+                    model.to(original_device)
+            
+            # Нормализуем эмбеддинг (L2 нормализация)
+            norm = np.linalg.norm(embedding)
+            if norm > 0:
+                embedding = embedding / norm
+            
+            return embedding.astype(np.float32)
                 
         except Exception as e:
             logger.error(f"❌ Ошибка при генерации эмбеддинга через Qwen: {e}")
@@ -149,6 +139,117 @@ class RAGService:
         logger.info(f"✅ RAG обработал документ {filename}, подготовил метрики для Qwen")
         return metrics
     
+    def generate_embeddings_batch(self, texts: List[str], batch_size: int = None) -> List[np.ndarray]:
+        """
+        Генерирует эмбеддинги для батча текстов (оптимизировано для A100 GPU)
+        
+        Args:
+            texts: Список текстов для обработки
+            batch_size: Размер батча (None = автоматический выбор для A100)
+            
+        Returns:
+            Список эмбеддингов
+        """
+        self._ensure_qwen_loaded()
+        
+        try:
+            model = self._qwen_service._model
+            tokenizer = self._qwen_service._tokenizer
+            
+            if model is None or tokenizer is None:
+                raise RuntimeError("Qwen model not loaded")
+            
+            device = self._qwen_service._get_best_device()
+            
+            # Автоматический выбор batch_size для A100
+            if batch_size is None:
+                if device == "cuda":
+                    # A100 может обрабатывать большие батчи
+                    batch_size = min(128, max(32, len(texts) // 5))
+                elif device == "mps":
+                    # MPS (Apple Silicon) - меньшие батчи
+                    batch_size = min(16, max(4, len(texts) // 10))
+                else:
+                    # CPU - еще меньшие батчи
+                    batch_size = min(8, max(2, len(texts) // 20))
+            
+            logger.info(f"🔄 Генерирую эмбеддинги на {device} батчами по {batch_size}...")
+            
+            embeddings = []
+            
+            # Обрабатываем батчами
+            for i in range(0, len(texts), batch_size):
+                batch_texts = texts[i:i + batch_size]
+                
+                # Токенизация батча
+                inputs = tokenizer(
+                    batch_texts,
+                    return_tensors="pt",
+                    padding=True,
+                    truncation=True,
+                    max_length=2048
+                )
+                
+                # Используем GPU (CUDA) для A100, иначе CPU для стабильности
+                if device == "cuda":
+                    # A100: используем GPU для максимальной производительности
+                    inputs_gpu = {k: v.to(device) for k, v in inputs.items()}
+                    
+                    with torch.no_grad():
+                        # Модель уже на GPU
+                        outputs = model(**inputs_gpu, output_hidden_states=True)
+                        
+                        hidden_states = outputs.hidden_states[-1]  # [batch_size, seq_len, hidden_size]
+                        attention_mask = inputs_gpu.get('attention_mask', None)
+                        
+                        if attention_mask is not None:
+                            mask_expanded = attention_mask.unsqueeze(-1).expand(hidden_states.size()).float()
+                            sum_hidden = torch.sum(hidden_states * mask_expanded, dim=1)
+                            sum_mask = torch.clamp(mask_expanded.sum(dim=1), min=1e-9)
+                            batch_embeddings = sum_hidden / sum_mask
+                        else:
+                            batch_embeddings = torch.mean(hidden_states, dim=1)
+                        
+                        # Перемещаем на CPU для конвертации в numpy
+                        batch_embeddings = batch_embeddings.cpu()
+                else:
+                    # CPU или MPS: используем CPU для стабильности
+                    inputs_cpu = {k: v.to("cpu") for k, v in inputs.items()}
+                    
+                    with torch.no_grad():
+                        original_device = next(model.parameters()).device
+                        model_cpu = model.to("cpu")
+                        
+                        try:
+                            outputs = model_cpu(**inputs_cpu, output_hidden_states=True)
+                        finally:
+                            model.to(original_device)
+                        
+                        hidden_states = outputs.hidden_states[-1]
+                        attention_mask = inputs_cpu.get('attention_mask', None)
+                        
+                        if attention_mask is not None:
+                            mask_expanded = attention_mask.unsqueeze(-1).expand(hidden_states.size()).float()
+                            sum_hidden = torch.sum(hidden_states * mask_expanded, dim=1)
+                            sum_mask = torch.clamp(mask_expanded.sum(dim=1), min=1e-9)
+                            batch_embeddings = sum_hidden / sum_mask
+                        else:
+                            batch_embeddings = torch.mean(hidden_states, dim=1)
+                
+                # Конвертируем в numpy и нормализуем
+                for emb in batch_embeddings:
+                    emb_np = emb.numpy().flatten()
+                    norm = np.linalg.norm(emb_np)
+                    if norm > 0:
+                        emb_np = emb_np / norm
+                    embeddings.append(emb_np.astype(np.float32))
+            
+            return embeddings
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка при генерации эмбеддингов батчем: {e}")
+            raise
+    
     async def save_metrics_to_postgres(
         self,
         db: AsyncSession,
@@ -174,10 +275,19 @@ class RAGService:
             from app.models.vector_store import DocumentChunk
             import uuid
             
-            for i, chunk_data in enumerate(chunks):
-                # Генерируем эмбеддинг для каждого чанка
-                chunk_embedding = self.generate_embedding(chunk_data["text"])
-                
+            if not chunks:
+                logger.warning(f"Нет чанков для сохранения документа {document_id}")
+                return
+            
+            # Оптимизация: генерируем эмбеддинги батчами (оптимизировано для A100)
+            chunk_texts = [chunk_data["text"] for chunk_data in chunks]
+            
+            # Автоматический выбор batch_size (для A100 будет 32-128)
+            chunk_embeddings = self.generate_embeddings_batch(chunk_texts, batch_size=None)
+            logger.info(f"✅ Сгенерировано {len(chunk_embeddings)} эмбеддингов")
+            
+            # Создаем чанки с эмбеддингами
+            for i, (chunk_data, chunk_embedding) in enumerate(zip(chunks, chunk_embeddings)):
                 chunk = DocumentChunk(
                     id=uuid.uuid4(),
                     document_id=uuid.UUID(document_id),
@@ -195,7 +305,7 @@ class RAGService:
                 db.add(chunk)
             
             await db.commit()
-            logger.info(f"✅ RAG сохранил метрики в Postgres для документа {document_id}")
+            logger.info(f"✅ RAG сохранил {len(chunks)} чанков в Postgres для документа {document_id}")
             
         except Exception as e:
             await db.rollback()
@@ -228,7 +338,11 @@ class RAGService:
             query_embedding = self.generate_embedding(query)
             
             # Поиск в Postgres через векторное сравнение
-            query_sql = """
+            # Используем правильный синтаксис для pgvector с asyncpg
+            embedding_list = query_embedding.tolist()
+            embedding_str = '[' + ','.join(map(str, embedding_list)) + ']'
+            
+            query_sql = f"""
                 SELECT 
                     dc.id,
                     dc.document_id,
@@ -240,21 +354,15 @@ class RAGService:
                     d.title as document_title,
                     d.type as document_type,
                     d.path as document_path,
-                    1 - (dc.embedding <=> :query_embedding::vector) as similarity
+                    1 - (dc.embedding <=> '{embedding_str}'::vector) as similarity
                 FROM document_chunks dc
                 JOIN documents d ON dc.document_id = d.id
                 WHERE d.is_deleted = false
                 ORDER BY similarity DESC
-                LIMIT :top_k
+                LIMIT {top_k}
             """
             
-            result = await db.execute(
-                text(query_sql),
-                {
-                    "query_embedding": query_embedding.tolist(),
-                    "top_k": top_k
-                }
-            )
+            result = await db.execute(text(query_sql))
             
             chunks = []
             for row in result:
@@ -328,7 +436,11 @@ class RAGService:
         try:
             query_embedding = self.generate_embedding(query)
             
-            query_sql = """
+            # Используем правильный синтаксис для pgvector с asyncpg
+            embedding_list = query_embedding.tolist()
+            embedding_str = '[' + ','.join(map(str, embedding_list)) + ']'
+            
+            query_sql = f"""
                 SELECT 
                     dc.id,
                     dc.document_id,
@@ -339,27 +451,19 @@ class RAGService:
                     dc.chunk_metadata,
                     d.title as document_title,
                     d.type as document_type,
-                    1 - (dc.embedding <=> :query_embedding::vector) as similarity
+                    1 - (dc.embedding <=> '{embedding_str}'::vector) as similarity
                 FROM document_chunks dc
                 JOIN documents d ON dc.document_id = d.id
                 WHERE d.is_deleted = false
             """
             
-            params = {
-                "query_embedding": query_embedding.tolist(),
-                "top_k": top_k
-            }
-            
             if document_ids:
-                query_sql += " AND dc.document_id = ANY(:document_ids)"
-                params["document_ids"] = [str(doc_id) for doc_id in document_ids]
+                doc_ids_str = ','.join([f"'{str(doc_id)}'" for doc_id in document_ids])
+                query_sql += f" AND dc.document_id = ANY(ARRAY[{doc_ids_str}]::uuid[])"
             
-            query_sql += " ORDER BY similarity DESC LIMIT :top_k"
+            query_sql += f" ORDER BY similarity DESC LIMIT {top_k}"
             
-            result = await db.execute(
-                text(query_sql),
-                params
-            )
+            result = await db.execute(text(query_sql))
             
             chunks = []
             for row in result:
