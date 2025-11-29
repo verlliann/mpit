@@ -10,6 +10,7 @@ from typing import List, Optional, Dict, Any
 import logging
 import os
 import json
+import time
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -34,13 +35,32 @@ class QwenService:
     
     def _ensure_model_loaded(self):
         """Ensure model is loaded (lazy loading) - вызывается только при первом использовании"""
+        
         if self._model is None or self._tokenizer is None:
             logger.info("🔄 Загрузка модели Qwen из локальной папки (lazy loading, первый запрос)...")
             try:
                 self._load_model()
+                logger.info("✅ Модель загружена, готова к использованию")
             except Exception as e:
                 logger.error(f"❌ Failed to load Qwen model: {e}", exc_info=True)
                 raise
+    
+    def get_memory_info(self) -> Dict[str, Any]:
+        """Получить информацию об использовании памяти GPU"""
+        info = {
+            "model_loaded": self._model is not None,
+            "tokenizer_loaded": self._tokenizer is not None,
+        }
+        
+        if torch.cuda.is_available():
+            info["cuda_available"] = True
+            info["gpu_memory_allocated"] = f"{torch.cuda.memory_allocated() / 1024**3:.2f} GB"
+            info["gpu_memory_reserved"] = f"{torch.cuda.memory_reserved() / 1024**3:.2f} GB"
+            info["gpu_memory_total"] = f"{torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB"
+        else:
+            info["cuda_available"] = False
+        
+        return info
     
     def _load_model(self):
         """Load Qwen model - вызывается только при первом использовании (lazy loading)"""
@@ -90,11 +110,30 @@ class QwenService:
         device = self._get_best_device()
         logger.info(f"Инициализация модели {model_name} на устройстве {device}")
         
-        model_kwargs = {
-            "dtype": torch.float32,  # Always use float32 for CPU compatibility
-            "device_map": None,  # Explicitly set to None for CPU
-            "trust_remote_code": True
-        }
+        # Настройки для GPU vs CPU
+        if device == "cuda":
+            # Вычисляем максимальную память для модели (в байтах)
+            max_memory_gb = settings.QWEN_MAX_MEMORY_PERCENT / 100.0
+            total_memory_bytes = torch.cuda.get_device_properties(0).total_memory
+            max_memory_bytes = int(total_memory_bytes * max_memory_gb)
+            max_memory = {0: f"{max_memory_bytes // (1024**3)}GiB"}  # Формат для accelerate
+            
+            model_kwargs = {
+                "dtype": torch.float16,  # Используем float16 для GPU (быстрее и меньше памяти)
+                "device_map": "auto",  # Автоматическое распределение по GPU
+                "max_memory": max_memory,  # Ограничение памяти для модели
+                "trust_remote_code": True,
+                "local_files_only": use_local,
+                "torch_dtype": torch.float16,  # Явно указываем dtype для ускорения
+            }
+            logger.info(f"💾 Использование памяти GPU: {settings.QWEN_MAX_MEMORY_PERCENT}% для модели, {100 - settings.QWEN_MAX_MEMORY_PERCENT}% для буфера")
+        else:
+            model_kwargs = {
+                "dtype": torch.float32,  # Always use float32 for CPU compatibility
+                "device_map": None,  # Explicitly set to None for CPU
+                "trust_remote_code": True,
+                "local_files_only": use_local
+            }
         
         # Quantization для экономии памяти (особенно полезно для Mac)
         if settings.QWEN_LOAD_IN_8BIT:
@@ -112,14 +151,16 @@ class QwenService:
                 logger.info("Используем Qwen2Tokenizer для Qwen3 модели...")
                 self._tokenizer = Qwen2Tokenizer.from_pretrained(
                     model_name,
-                    trust_remote_code=True
+                    trust_remote_code=True,
+                    local_files_only=use_local
                 )
             except (ImportError, Exception) as tokenizer_error:
                 logger.warning(f"⚠️ Qwen2Tokenizer недоступен ({tokenizer_error}), пробуем AutoTokenizer...")
                 # Fallback на AutoTokenizer
                 self._tokenizer = AutoTokenizer.from_pretrained(
                     model_name,
-                    trust_remote_code=True
+                    trust_remote_code=True,
+                    local_files_only=use_local
                 )
             
             logger.info("📥 Загрузка модели (это может занять время)...")
@@ -139,10 +180,40 @@ class QwenService:
                         self._tokenizer.pad_token = self._tokenizer.eos_token
                 return  # Выходим, модель будет None, но токенизатор загружен
             
-            # Explicitly move model to device if CPU
-            if device == "cpu":
+            # Проверяем на каком устройстве модель после загрузки
+            if device == "cuda":
+                # При device_map="auto" модель уже на GPU, проверяем
+                try:
+                    # Проверяем устройство первого параметра модели
+                    first_param = next(self._model.parameters())
+                    actual_device = first_param.device
+                    logger.info(f"🔍 Модель загружена на устройстве: {actual_device}")
+                    
+                    if actual_device.type != "cuda":
+                        logger.warning(f"⚠️ Модель не на GPU! Текущее устройство: {actual_device}, перемещаем на cuda...")
+                        self._model = self._model.to("cuda")
+                        logger.info("✅ Модель перемещена на cuda")
+                    else:
+                        logger.info(f"✅ Модель уже на GPU: {actual_device}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Не удалось проверить устройство модели: {e}, пробуем переместить на cuda...")
+                    try:
+                        self._model = self._model.to("cuda")
+                        logger.info("✅ Модель перемещена на cuda")
+                    except Exception as move_error:
+                        logger.error(f"❌ Не удалось переместить модель на cuda: {move_error}")
+            elif device == "cpu":
                 self._model = self._model.to("cpu")
+                logger.info("✅ Модель на CPU")
+            
             self._model.eval()  # Set to evaluation mode
+            
+            # Финальная проверка устройства
+            try:
+                final_device = next(self._model.parameters()).device
+                logger.info(f"✅ Финальная проверка: модель на устройстве {final_device}")
+            except Exception as e:
+                logger.warning(f"⚠️ Не удалось проверить финальное устройство: {e}")
             
             if self._tokenizer.pad_token is None:
                 self._tokenizer.pad_token = self._tokenizer.eos_token
@@ -211,11 +282,12 @@ class QwenService:
             }
         
         prompt = f"""Проанализируй следующий документ и определи:
-1. Тип документа (contract, invoice, act, order, email, scan)
+1. Тип документа (contract, invoice, act, order, email, scan, document, presentation, report)
 2. Название организации-контрагента (если есть)
 3. Дату документа (если есть)
 4. Приоритет (high, medium, low)
 5. Краткое описание (1-2 предложения)
+6. Теги - выдели 3-7 ключевых слов/фраз, которые характеризуют документ (например: "договор", "поставка", "2024", "ООО Рога", "техническая документация")
 
 Текст документа:
 {text[:2000]}
@@ -226,23 +298,64 @@ class QwenService:
     "counterparty_name": "название организации или null",
     "date": "YYYY-MM-DD или null",
     "priority": "high/medium/low",
-    "description": "краткое описание"
+    "description": "краткое описание",
+    "tags": ["тег1", "тег2", "тег3"]
 }}"""
         
         try:
-            response = self._generate_text(
-                prompt=prompt,
-                max_new_tokens=256,
-                temperature=0.3
-            )
+            logger.info(f"🔄 Начинаю генерацию классификации для {filename}...")
+            import asyncio
+            import signal
+            
+            # Запускаем генерацию с таймаутом
+            try:
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        self._generate_text,
+                        prompt=prompt,
+                        max_new_tokens=256,
+                        temperature=0.3
+                    ),
+                    timeout=60.0  # 60 секунд таймаут
+                )
+                logger.info(f"✅ Генерация завершена для {filename}")
+            except asyncio.TimeoutError:
+                logger.error(f"⏱️ Таймаут генерации для {filename} (>60 сек), используем fallback")
+                classification = self._fallback_classify(text, filename)
+                return {
+                    "classification": classification,
+                    "processed": False,
+                    "error": "Generation timeout",
+                    "chunks_count": metrics.get("chunks_count", 0),
+                    "text_length": metrics.get("text_length", 0)
+                }
             
             # Parse JSON from response
             import re
-            json_match = re.search(r'\{[^}]+\}', response, re.DOTALL)
+            # Ищем JSON объект в ответе (может быть многострочным)
+            json_match = re.search(r'\{.*?"tags".*?\}', response, re.DOTALL)
+            if not json_match:
+                # Пробуем найти любой JSON объект
+                json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response, re.DOTALL)
+            
             if json_match:
-                classification = json.loads(json_match.group())
+                try:
+                    classification = json.loads(json_match.group())
+                    # Убеждаемся, что tags - это список
+                    if "tags" in classification and not isinstance(classification["tags"], list):
+                        if isinstance(classification["tags"], str):
+                            # Если теги в виде строки, разбиваем по запятым
+                            classification["tags"] = [t.strip() for t in classification["tags"].split(",") if t.strip()]
+                        else:
+                            classification["tags"] = []
+                    elif "tags" not in classification:
+                        classification["tags"] = []
+                except json.JSONDecodeError as e:
+                    logger.warning(f"⚠️ Не удалось распарсить JSON ответ: {e}, используем fallback")
+                    classification = self._fallback_classify(text, filename)
             else:
                 classification = self._fallback_classify(text, filename)
+                classification["tags"] = []
             
             # Формируем обратные метрики для RAG → Postgres
             reverse_metrics = {
@@ -368,7 +481,8 @@ class QwenService:
             logger.info(f"🔍 Qwen → RAG → Postgres: начинаю поиск документов...")
             
             # RAG обращается к Postgres - увеличиваем top_k для получения всех релевантных документов
-            chunks = await rag_service.search_for_qwen(db, query, top_k=20)
+            # Используем больше чанков для лучшего покрытия всех документов
+            chunks = await rag_service.search_for_qwen(db, query, top_k=30)
             logger.info(f"✅ RAG → Postgres: найдено {len(chunks)} чанков")
             
             if not chunks:
@@ -379,20 +493,29 @@ class QwenService:
                 }
             
             # Формируем контекст для ответа (используем больше чанков для лучшего контекста)
+            # Сортируем чанки по similarity для приоритета наиболее релевантных
+            sorted_chunks = sorted(chunks, key=lambda x: x.get('similarity', 0.0), reverse=True)
+            
             context = "\n\n".join([
-                f"Документ: {chunk['document_title']}\n{chunk['text'][:300]}"
-                for chunk in chunks[:10]  # Используем топ-10 чанков для контекста
+                f"Документ: {chunk['document_title']} (релевантность: {chunk.get('similarity', 0.0):.3f})\n{chunk['text'][:400]}"
+                for chunk in sorted_chunks[:10]  # Используем топ-10 наиболее релевантных чанков
             ])
             
-            # Генерируем ответ на основе контекста
+            # Генерируем ответ на основе контекста с акцентом на релевантность
             prompt = f"""На основе следующего контекста из документов ответь на вопрос пользователя.
 
-Контекст:
+ВАЖНО: 
+- Используй ТОЛЬКО документы, которые ДЕЙСТВИТЕЛЬНО относятся к запросу пользователя
+- Игнорируй документы, которые не имеют отношения к запросу, даже если они есть в контексте
+- Если ни один документ не релевантен, скажи что документы не найдены
+
+Контекст из документов (отсортированы по релевантности):
 {context}
 
-Вопрос: {query}
+Вопрос пользователя: {query}
 
-Ответь кратко и по делу."""
+Ответь кратко и точно. Если документ не относится к запросу, НЕ упоминай его.
+Если релевантных документов нет, скажи "По вашему запросу документы не найдены"."""
             
             answer = self._generate_text(
                 prompt=prompt,
@@ -400,40 +523,65 @@ class QwenService:
                 temperature=0.7
             )
             
-            # Собираем ВСЕ уникальные документы из всех релевантных чанков
-            seen_doc_ids = set()
+            # Собираем уникальные документы из релевантных чанков
+            # Группируем чанки по документам и берем максимальную similarity для каждого документа
+            seen_doc_ids = {}
             documents = []
             
-            # Проходим по всем чанкам и собираем уникальные документы
-            for chunk in chunks:
+            # Проходим по всем чанкам и собираем уникальные документы с максимальной similarity
+            for chunk in sorted_chunks:  # Используем уже отсортированные чанки
                 doc_id = chunk["document_id"]
+                similarity = chunk.get("similarity", 0.0)
                 
-                # Пропускаем, если уже добавили этот документ
+                # Если документ уже добавлен, обновляем similarity если текущий чанк более релевантен
                 if doc_id in seen_doc_ids:
+                    if similarity > seen_doc_ids[doc_id].get("similarity", 0.0):
+                        seen_doc_ids[doc_id]["similarity"] = similarity
                     continue
-                
-                seen_doc_ids.add(doc_id)
                 
                 # Пытаемся получить из Redis
                 logger.debug(f"🔍 Qwen → Redis: проверяю документ {doc_id}")
                 doc_data = await self.get_document_from_redis(doc_id)
                 
-                # Добавляем документ (даже если нет в Redis, используем данные из чанка)
-                documents.append({
+                # Добавляем документ с максимальной similarity
+                doc_info = {
                     "document_id": doc_id,
                     "title": chunk["document_title"],
                     "type": chunk["document_type"],
                     "path": chunk.get("document_path"),
                     "available": doc_data is not None,
-                    "similarity": chunk.get("similarity", 0.0)  # Добавляем similarity для сортировки
-                })
+                    "similarity": similarity
+                }
+                seen_doc_ids[doc_id] = doc_info
+                documents.append(doc_info)
+                
                 if doc_data:
                     logger.debug(f"✅ Qwen → Redis: документ {doc_id} найден в Redis")
                 else:
                     logger.debug(f"⚠️ Qwen → Redis: документ {doc_id} не найден в Redis (используем данные из Postgres)")
             
-            # Сортируем документы по similarity (релевантности)
+            # Сортируем документы по similarity (релевантности) - наиболее релевантные первыми
             documents.sort(key=lambda x: x.get("similarity", 0.0), reverse=True)
+            
+            # Фильтруем документы с очень низкой релевантностью
+            # Используем более строгий порог (0.85) из-за высокой similarity между всеми документами
+            # Также логируем similarity для отладки
+            logger.info(f"📊 Найдено документов до фильтрации: {len(documents)}")
+            for doc in documents:
+                logger.info(f"  - {doc['title']}: similarity={doc.get('similarity', 0.0):.3f}")
+            
+            # Используем более строгий порог и берем только топ документы
+            # Если есть документы с similarity > 0.9, берем только их
+            high_relevance = [doc for doc in documents if doc.get("similarity", 0.0) >= 0.90]
+            if high_relevance:
+                filtered_documents = high_relevance
+                logger.info(f"📊 Найдено документов с высокой релевантностью (similarity >= 0.90): {len(filtered_documents)}")
+            else:
+                # Если нет очень релевантных, берем топ-1 наиболее релевантный
+                filtered_documents = documents[:1] if documents else []
+                logger.info(f"⚠️ Нет документов с similarity >= 0.90, берем топ-1: {len(filtered_documents)}")
+            
+            documents = filtered_documents
             
             logger.info(f"✅ Qwen сформировал ответ на запрос, найдено {len(documents)} уникальных документов из {len(chunks)} чанков")
             
@@ -453,13 +601,10 @@ class QwenService:
             }
     
     def classify_document(self, text: str, filename: str = "") -> Dict[str, Any]:
-        """Legacy method for direct classification"""
-        try:
-            self._ensure_model_loaded()
-            return self._fallback_classify(text, filename)
-        except Exception as e:
-            logger.warning(f"Model not available, using fallback: {e}")
-            return self._fallback_classify(text, filename)
+        """Legacy method for direct classification - использует fallback для скорости"""
+        # Используем fallback для быстрой классификации без генерации
+        # Если нужна генерация, используйте classify_metrics_from_rag
+        return self._fallback_classify(text, filename)
     
     def _generate_text(
         self,
@@ -473,9 +618,10 @@ class QwenService:
             raise RuntimeError("Model not loaded")
         
         try:
-            # Всегда используем CPU для генерации, чтобы избежать проблем с MPS
-            original_device = next(self._model.parameters()).device
-            model_on_cpu = self._model.to("cpu")
+            # Используем устройство на котором находится модель (GPU или CPU)
+            device = next(self._model.parameters()).device
+            logger.info(f"🚀 Генерация на устройстве: {device}")
+            logger.info(f"📝 Длина промпта: {len(prompt)} символов, max_new_tokens: {max_new_tokens}")
             
             inputs = self._tokenizer(
                 prompt,
@@ -485,11 +631,12 @@ class QwenService:
                 max_length=2048
             )
             
-            # Inputs всегда на CPU
-            inputs = {k: v.to("cpu") for k, v in inputs.items()}
+            # Inputs на том же устройстве что и модель
+            inputs = {k: v.to(device) for k, v in inputs.items()}
+            logger.info(f"🔄 Начинаю generate() на {device}...")
             
             with torch.no_grad():
-                outputs = model_on_cpu.generate(
+                outputs = self._model.generate(
                     **inputs,
                     max_new_tokens=max_new_tokens,
                     temperature=temperature,
@@ -497,11 +644,10 @@ class QwenService:
                     do_sample=True,
                     pad_token_id=self._tokenizer.pad_token_id,
                     eos_token_id=self._tokenizer.eos_token_id,
-                    repetition_penalty=1.2  # Штраф за повторения
+                    repetition_penalty=1.2
                 )
             
-            # Возвращаем модель на исходное устройство
-            self._model = model_on_cpu.to(original_device)
+            logger.info(f"✅ generate() завершен, длина вывода: {outputs.shape}")
             
             generated_text = self._tokenizer.decode(
                 outputs[0],
@@ -556,12 +702,25 @@ class QwenService:
         elif any(word in text_lower for word in ["низкий", "low", "неважно"]):
             priority = "low"
         
+        # Извлекаем простые теги из текста и названия файла
+        from pathlib import Path
+        fallback_tags = []
+        if filename:
+            # Добавляем расширение файла как тег
+            file_ext = Path(filename).suffix.lower()
+            if file_ext:
+                fallback_tags.append(file_ext.replace('.', ''))
+        # Добавляем тип документа как тег
+        if doc_type != "scan":
+            fallback_tags.append(doc_type)
+        
         return {
             "type": doc_type,
             "counterparty_name": None,
             "date": None,
             "priority": priority,
-            "description": f"Документ: {filename or 'без названия'}"
+            "description": f"Документ: {filename or 'без названия'}",
+            "tags": fallback_tags
         }
 
 

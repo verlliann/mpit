@@ -132,12 +132,17 @@ async def get_documents(
     
     # Search
     if search:
-        query = query.where(
-            or_(
+        # Поиск по названию, описанию и тегам
+        # Для тегов используем простую проверку через ANY - ищем подстроку в любом элементе массива
+        from sqlalchemy import text
+        search_conditions = [
                 Document.title.ilike(f"%{search}%"),
-                Document.description.ilike(f"%{search}%")
-            )
-        )
+            Document.description.ilike(f"%{search}%"),
+            # Поиск по тегам: проверяем, есть ли в массиве тегов элемент, содержащий строку поиска
+            text("EXISTS (SELECT 1 FROM jsonb_array_elements_text(documents.tags) AS tag WHERE tag ILIKE :search_pattern)")
+            .bindparam(search_pattern=f"%{search}%")
+        ]
+        query = query.where(or_(*search_conditions))
     
     # Get total count
     count_query = select(func.count()).select_from(query.subquery())
@@ -395,9 +400,17 @@ async def upload_document(
         doc_priority = priority or classification.get("priority", "medium")
         doc_description = classification.get("description", "") or ""
         doc_tags = json.loads(tags) if tags else []
+        # Добавляем теги из классификации Qwen
         if classification.get("tags"):
             if isinstance(classification.get("tags"), list):
-                doc_tags.extend(classification.get("tags", []))
+                # Убираем дубликаты и пустые строки
+                new_tags = [tag.strip() for tag in classification.get("tags", []) if tag and tag.strip()]
+                # Объединяем с существующими тегами, убирая дубликаты
+                existing_tags = [tag.lower() for tag in doc_tags if tag]
+                for tag in new_tags:
+                    if tag.lower() not in existing_tags:
+                        doc_tags.append(tag)
+                        existing_tags.append(tag.lower())
     except Exception as e:
         logger.error(f"❌ Qwen classification failed: {e}")
         doc_type = type or "document"
@@ -470,10 +483,23 @@ async def upload_document(
     except Exception as e:
         logger.error(f"❌ Failed to queue RAG task: {e}")
         # Fallback to background tasks if Celery is not available
-        async def background_save_rag_metrics():
-            """Фоновая задача для сохранения RAG метрик"""
+        def background_save_rag_metrics():
+            """Фоновая задача для сохранения RAG метрик (синхронная обертка)"""
+            import asyncio
             try:
-                # Создаем новую сессию для фоновой задачи
+                # Создаем новый event loop для фоновой задачи
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(_async_save_rag_metrics())
+                finally:
+                    loop.close()
+            except Exception as e:
+                logger.error(f"❌ Failed to save RAG metrics (фоновая задача): {e}")
+        
+        async def _async_save_rag_metrics():
+            """Асинхронная часть сохранения RAG метрик"""
+            try:
                 async with AsyncSessionLocal() as bg_db:
                     await rag_service.save_metrics_to_postgres(
                         db=bg_db,
@@ -485,8 +511,21 @@ async def upload_document(
             except Exception as e:
                 logger.error(f"❌ Failed to save RAG metrics (фоновая задача): {e}")
     
-    async def background_save_redis():
-        """Фоновая задача для сохранения в Redis"""
+    def background_save_redis():
+        """Фоновая задача для сохранения в Redis (синхронная обертка)"""
+        import asyncio
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(_async_save_redis())
+            finally:
+                loop.close()
+        except Exception as e:
+            logger.error(f"❌ Failed to save to Redis (фоновая задача): {e}")
+    
+    async def _async_save_redis():
+        """Асинхронная часть сохранения в Redis"""
         try:
             await qwen_service.save_document_to_redis(
                 document_id=str(document.id),
@@ -504,7 +543,7 @@ async def upload_document(
         except Exception as e:
             logger.error(f"❌ Failed to save document to Redis (фоновая задача): {e}")
     
-    async def background_generate_url():
+    def background_generate_url():
         """Фоновая задача для генерации presigned URL"""
         try:
             presigned_url = get_presigned_url(s3_path)
@@ -520,6 +559,218 @@ async def upload_document(
     
     logger.info(f"✅ Отправляю ответ на фронт для документа {document.id} (фоновые задачи запущены)")
     return response_data
+
+
+@router.get("/{document_id}/content")
+async def get_document_content(
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get document content (text) for preview"""
+    result = await db.execute(
+        select(Document)
+        .where(Document.id == uuid.UUID(document_id))
+        .where(Document.uploaded_by == current_user.id)
+    )
+    doc = result.scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Получаем чанки документа из RAG
+    try:
+        from app.models.vector_store import DocumentChunk
+        chunks_result = await db.execute(
+            select(DocumentChunk)
+            .where(DocumentChunk.document_id == uuid.UUID(document_id))
+            .order_by(DocumentChunk.start_pos)
+        )
+        chunks = chunks_result.scalars().all()
+        
+        if chunks:
+            # Собираем текст из всех чанков
+            content = "\n\n".join([chunk.text for chunk in chunks])
+            return {
+                "content": content,
+                "pages": doc.pages,
+                "type": doc.type,
+                "title": doc.title
+            }
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to get chunks: {e}")
+    
+    # Если чанков нет, пытаемся получить из Redis через Qwen service
+    try:
+        from app.services.qwen_service import QwenService
+        qwen_service = QwenService()
+        doc_data = await qwen_service.get_document_from_redis(str(doc.id))
+        if doc_data and doc_data.get("metadata", {}).get("text"):
+            return {
+                "content": doc_data["metadata"]["text"],
+                "pages": doc.pages,
+                "type": doc.type,
+                "title": doc.title
+            }
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to get from Redis: {e}")
+    
+    # Если ничего не найдено, возвращаем описание
+    return {
+        "content": doc.description or f"Содержимое документа {doc.title} недоступно для предпросмотра.",
+        "pages": doc.pages,
+        "type": doc.type,
+        "title": doc.title
+    }
+
+
+@router.get("/{document_id}/preview-pages")
+async def get_document_preview_pages(
+    document_id: str,
+    max_pages: int = Query(5, ge=1, le=10),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get first N pages of document (PDF, Word, etc.) as images for preview"""
+    result = await db.execute(
+        select(Document)
+        .where(Document.id == uuid.UUID(document_id))
+        .where(Document.uploaded_by == current_user.id)
+    )
+    doc = result.scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Определяем тип файла
+    file_ext = Path(doc.path).suffix.lower()
+    supported_formats = ['.pdf', '.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt']
+    
+    if file_ext not in supported_formats:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Preview pages not available for {file_ext} files. Supported: {', '.join(supported_formats)}"
+        )
+    
+    try:
+        import fitz  # PyMuPDF
+        import base64
+        from io import BytesIO
+        from PIL import Image
+        import tempfile
+        import os
+        
+        # Загружаем файл из MinIO
+        file_data = download_file(doc.path)
+        
+        # Если это не PDF, конвертируем в PDF
+        pdf_data = file_data
+        if file_ext != '.pdf':
+            try:
+                import pypandoc
+                # Сохраняем исходный файл во временный файл
+                with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_input:
+                    tmp_input.write(file_data)
+                    tmp_input_path = tmp_input.name
+                
+                # Конвертируем в PDF
+                tmp_output_path = tmp_input_path + '.pdf'
+                try:
+                    # Пробуем конвертировать без указания pdf-engine (pandoc выберет доступный)
+                    # Если pdflatex недоступен, pandoc может использовать другой движок
+                    try:
+                        pypandoc.convert_file(
+                            tmp_input_path,
+                            'pdf',
+                            outputfile=tmp_output_path,
+                            extra_args=['--pdf-engine=pdflatex']
+                        )
+                    except Exception as pdflatex_error:
+                        logger.warning(f"⚠️ pdflatex failed, trying without pdf-engine: {pdflatex_error}")
+                        # Пробуем без указания движка
+                        pypandoc.convert_file(
+                            tmp_input_path,
+                            'pdf',
+                            outputfile=tmp_output_path
+                        )
+                    # Читаем сконвертированный PDF
+                    with open(tmp_output_path, 'rb') as f:
+                        pdf_data = f.read()
+                except Exception as conv_error:
+                    logger.warning(f"⚠️ Pandoc conversion failed: {conv_error}")
+                    # Если pandoc не установлен или конвертация не удалась, 
+                    # возвращаем понятную ошибку
+                    error_msg = str(conv_error)
+                    if "pandoc" in error_msg.lower() or "not found" in error_msg.lower():
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"Для предпросмотра {file_ext} файлов требуется pandoc. Установите: apt-get update && apt-get install -y pandoc"
+                        )
+                    else:
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"Не удалось конвертировать {file_ext} в PDF: {error_msg}"
+                        )
+                finally:
+                    # Удаляем временные файлы
+                    try:
+                        if os.path.exists(tmp_input_path):
+                            os.unlink(tmp_input_path)
+                        if os.path.exists(tmp_output_path):
+                            os.unlink(tmp_output_path)
+                    except:
+                        pass
+            except ImportError:
+                logger.error("❌ pypandoc not available")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"PDF preview for {file_ext} requires pypandoc. Please install: pip install pypandoc"
+                )
+        
+        # Открываем PDF (оригинальный или сконвертированный)
+        pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
+        
+        pages_images = []
+        total_pages = len(pdf_document)
+        pages_to_render = min(max_pages, total_pages)
+        
+        for page_num in range(pages_to_render):
+            page = pdf_document[page_num]
+            
+            # Рендерим страницу в изображение (DPI 150 для хорошего качества)
+            mat = fitz.Matrix(150/72, 150/72)  # 150 DPI
+            pix = page.get_pixmap(matrix=mat)
+            
+            # Конвертируем в PIL Image
+            img_data = pix.tobytes("png")
+            img = Image.open(BytesIO(img_data))
+            
+            # Конвертируем в base64 для отправки на фронт
+            buffer = BytesIO()
+            img.save(buffer, format='PNG', optimize=True)
+            img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            
+            pages_images.append({
+                "page": page_num + 1,
+                "image": f"data:image/png;base64,{img_base64}",
+                "width": img.width,
+                "height": img.height
+            })
+        
+        pdf_document.close()
+        
+        return {
+            "pages": pages_images,
+            "total_pages": total_pages,
+            "rendered_pages": pages_to_render
+        }
+        
+    except ImportError:
+        logger.error("PyMuPDF not installed, cannot render PDF pages")
+        raise HTTPException(status_code=500, detail="PDF rendering not available")
+    except Exception as e:
+        logger.error(f"Error rendering PDF pages: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to render PDF pages: {str(e)}")
 
 
 @router.get("/{document_id}/download")

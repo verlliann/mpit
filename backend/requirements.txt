@@ -10,7 +10,7 @@ psycopg2-binary==2.9.9
 pgvector==0.2.4
 
 # Redis
-redis==5.0.1
+redis>=4.5.2,<5.0.0,!=4.5.5
 hiredis==2.2.3
 
 # Celery for background tasks
@@ -41,6 +41,8 @@ openpyxl==3.1.2
 PyPDF2==3.0.1
 pdfplumber==0.10.3
 pypandoc==1.12
+PyMuPDF==1.23.8  # Для конвертации PDF в изображения
+Pillow==10.1.0  # Для работы с изображениями
 
 # Utilities
 pydantic==2.5.0

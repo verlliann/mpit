@@ -13,8 +13,8 @@ const getBaseURL = () => {
     return '';
   }
   
-  // In development, use localhost
-  return 'http://localhost:8000';
+  // In development, use tuna tunnel
+  return 'https://api-mpit.ru.tuna.am';
 };
 
 export const API_CONFIG = {
@@ -44,6 +44,8 @@ export const API_ENDPOINTS = {
     DELETE: (id: string) => `/api/v1/documents/${id}`,
     UPLOAD: '/api/v1/documents/upload',
     DOWNLOAD: (id: string) => `/api/v1/documents/${id}/download`,
+    CONTENT: (id: string) => `/api/v1/documents/${id}/content`,
+    PREVIEW_PAGES: (id: string) => `/api/v1/documents/${id}/preview-pages`,
     FAVORITES: '/api/v1/documents/favorites',
     ARCHIVE: '/api/v1/documents/archive',
     TRASH: '/api/v1/documents/trash',

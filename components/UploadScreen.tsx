@@ -113,12 +113,12 @@ export const UploadScreen: React.FC = () => {
   };
 
   return (
-    <div className="p-8 max-w-4xl mx-auto h-full flex flex-col">
+    <div className="p-8 max-w-4xl mx-auto min-h-full pb-12">
       <h2 className="text-2xl font-bold text-slate-800 mb-6">Загрузка документов</h2>
       
       {/* Drag Zone */}
       <div 
-        className={`flex-1 border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-12 transition-all duration-200 ${
+        className={`border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-12 transition-all duration-200 mb-8 ${
           isDragging 
             ? 'border-primary bg-blue-50' 
             : 'border-slate-300 bg-slate-50 hover:bg-slate-100'

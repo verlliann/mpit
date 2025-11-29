@@ -290,7 +290,7 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ document, onCl
                     placeholder="Добавьте описание документа..."
                   />
                 ) : (
-                  <div className="text-sm text-slate-700 bg-white/60 p-4 rounded-xl border border-white/50 leading-relaxed shadow-sm backdrop-blur-sm">
+                  <div className="text-sm text-slate-700 bg-white/60 p-4 rounded-xl border border-white/50 leading-relaxed shadow-sm backdrop-blur-sm break-words overflow-wrap-anywhere">
                     {editedDoc.description || <span className="text-slate-400 italic">Описание отсутствует</span>}
                   </div>
                 )}

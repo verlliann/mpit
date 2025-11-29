@@ -17,6 +17,22 @@ export const Topbar: React.FC<TopbarProps> = ({ onNavigate, onLogout, onOpenComm
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [notifications, setNotifications] = useState([
+    {
+      id: '1',
+      type: 'warning' as const,
+      title: 'Обнаружены дубликаты',
+      message: 'Система нашла 3 похожих документа в загрузке от 15.01',
+      time: '10 минут назад'
+    },
+    {
+      id: '2',
+      type: 'success' as const,
+      title: 'Импорт завершен',
+      message: 'Обработано 12 документов из Email',
+      time: '1 час назад'
+    }
+  ]);
 
   // Close dropdowns when clicking outside
   const notifRef = useRef<HTMLDivElement>(null);
@@ -45,7 +61,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onNavigate, onLogout, onOpenComm
     setIsSearching(true);
     try {
       // API search returns { answer, documents, total } format
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/documents/search?query=${encodeURIComponent(query)}&limit=5`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://api-mpit.ru.tuna.am'}/api/v1/documents/search?query=${encodeURIComponent(query)}&limit=5`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
         },
@@ -197,36 +213,59 @@ export const Topbar: React.FC<TopbarProps> = ({ onNavigate, onLogout, onOpenComm
             className={`relative p-2.5 rounded-xl transition-all duration-200 ${showNotifications ? 'bg-white shadow-md text-indigo-600' : 'text-slate-600 hover:bg-white/50 hover:text-indigo-600'}`}
           >
             <Bell size={20} />
+            {notifications.length > 0 && (
             <span className="absolute top-2 right-2.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white"></span>
+            )}
           </button>
           
           {showNotifications && (
             <div className={`absolute right-0 top-full mt-4 w-80 rounded-2xl z-50 animate-in fade-in zoom-in-95 duration-200 ${GLASS_STYLES.modal}`}>
               <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100/50">
                 <span className="font-bold text-sm text-slate-800">Уведомления</span>
-                <span className="text-xs text-indigo-600 cursor-pointer hover:text-indigo-800 font-medium">Очистить</span>
+                <button
+                  onClick={() => setNotifications([])}
+                  className="text-xs text-indigo-600 cursor-pointer hover:text-indigo-800 font-medium transition-colors"
+                >
+                  Очистить
+                </button>
               </div>
               <div className="max-h-80 overflow-y-auto p-2">
-                <div className="p-3 rounded-xl hover:bg-white/50 transition-colors cursor-pointer mb-1">
-                  <div className="flex items-start gap-3">
-                    <div className="text-amber-500 mt-0.5 bg-amber-50 p-1.5 rounded-lg"><AlertTriangle size={16} /></div>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">Обнаружены дубликаты</p>
-                      <p className="text-xs text-slate-600 mt-0.5">Система нашла 3 похожих документа в загрузке от 15.01</p>
-                      <p className="text-[10px] text-slate-400 mt-1 font-medium">10 минут назад</p>
-                    </div>
+                {notifications.length === 0 ? (
+                  <div className="px-4 py-8 text-center text-slate-400 text-sm">
+                    Нет уведомлений
                   </div>
+                ) : (
+                  notifications.map((notif) => (
+                    <div key={notif.id} className="p-3 rounded-xl hover:bg-white/50 transition-colors cursor-pointer mb-1">
+                      <div className="flex items-start gap-3">
+                        <div className={`mt-0.5 p-1.5 rounded-lg ${
+                          notif.type === 'warning' ? 'text-amber-500 bg-amber-50' :
+                          notif.type === 'success' ? 'text-emerald-500 bg-emerald-50' :
+                          notif.type === 'error' ? 'text-rose-500 bg-rose-50' :
+                          'text-blue-500 bg-blue-50'
+                        }`}>
+                          {notif.type === 'warning' ? <AlertTriangle size={16} /> :
+                           notif.type === 'success' ? <CheckCircle size={16} /> :
+                           <AlertTriangle size={16} />}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-slate-800">{notif.title}</p>
+                          <p className="text-xs text-slate-600 mt-0.5">{notif.message}</p>
+                          <p className="text-[10px] text-slate-400 mt-1 font-medium">{notif.time}</p>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setNotifications(prev => prev.filter(n => n.id !== notif.id));
+                          }}
+                          className="opacity-0 group-hover:opacity-100 hover:opacity-100 p-1 rounded hover:bg-slate-100 transition-opacity"
+                        >
+                          <X size={14} className="text-slate-400" />
+                        </button>
                 </div>
-                <div className="p-3 rounded-xl hover:bg-white/50 transition-colors cursor-pointer">
-                  <div className="flex items-start gap-3">
-                    <div className="text-emerald-500 mt-0.5 bg-emerald-50 p-1.5 rounded-lg"><CheckCircle size={16} /></div>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">Импорт завершен</p>
-                      <p className="text-xs text-slate-600 mt-0.5">Обработано 12 документов из Email</p>
-                      <p className="text-[10px] text-slate-400 mt-1 font-medium">1 час назад</p>
                     </div>
-                  </div>
-                </div>
+                  ))
+                )}
               </div>
             </div>
           )}

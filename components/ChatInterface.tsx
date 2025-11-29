@@ -20,6 +20,21 @@ interface Message {
 }
 
 export const ChatInterface: React.FC = () => {
+  // Маппинг типов документов для отображения
+  const getTypeLabel = (type: string) => {
+    const typeMap: Record<string, string> = {
+      'contract': 'Договор',
+      'invoice': 'Счет',
+      'act': 'Акт',
+      'order': 'Приказ',
+      'email': 'Письмо',
+      'scan': 'Скан',
+      'document': 'Документ',
+      'presentation': 'Презентация',
+      'report': 'Отчет'
+    };
+    return typeMap[type] || type;
+  };
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
@@ -190,7 +205,7 @@ export const ChatInterface: React.FC = () => {
                             {doc.title}
                           </div>
                           <div className="text-indigo-600 mt-0.5 ml-5">
-                            {doc.type} {doc.available ? '• Нажмите для предпросмотра' : '• Недоступен'}
+                            {getTypeLabel(doc.type)} {doc.available ? '• Нажмите для предпросмотра' : '• Недоступен'}
                           </div>
                         </button>
                       ))}

@@ -350,16 +350,24 @@ class HttpClient {
     const url = this.buildUrl(endpoint, options?.params);
     const headers = this.getHeaders(options);
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers,
-    });
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+      });
 
-    if (!response.ok) {
-      throw new ApiError(response.status, `Download failed: ${response.statusText}`);
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => response.statusText);
+        throw new ApiError(response.status, `Download failed: ${errorText || response.statusText}`);
+      }
+
+      return await response.blob();
+    } catch (error: any) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(0, `Download failed: ${error.message || 'Network error'}`);
     }
-
-    return response.blob();
   }
 }
 

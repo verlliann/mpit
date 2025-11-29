@@ -1,0 +1,21 @@
+tunnels:
+  web:
+    commandLine: http localhost:5173 --subdomain=web-mpit
+    tags: [frontend, ui]
+  
+  api:
+    commandLine: http localhost:8000 --subdomain=api-mpit
+    tags: [backend, api]
+  
+  postgres:
+    commandLine: tcp localhost:5432
+    tags: [backend]
+  
+  redis:
+    commandLine: tcp localhost:6379
+    tags: [backend]
+  
+  minio:
+    commandLine: http localhost:9100 --subdomain=minio-mpit
+    tags: [backend, storage]
+

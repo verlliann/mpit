@@ -20,6 +20,22 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
   const [searchQuery, setSearchQuery] = useState('');
   const [previewDocument, setPreviewDocument] = useState<Document | null>(null);
 
+  // Маппинг типов документов для отображения
+  const getTypeLabel = (type: string) => {
+    const typeMap: Record<string, string> = {
+      'contract': 'Договор',
+      'invoice': 'Счет',
+      'act': 'Акт',
+      'order': 'Приказ',
+      'email': 'Письмо',
+      'scan': 'Скан',
+      'document': 'Документ',
+      'presentation': 'Презентация',
+      'report': 'Отчет'
+    };
+    return typeMap[type] || type;
+  };
+
   const [currentPage, setCurrentPage] = useState(1);
 
   // Build params based on current view
@@ -77,7 +93,7 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
 
   const toggleAll = () => {
     if (selectedIds.size === documents.length) {
-      setSelectedIds(newSet());
+      setSelectedIds(new Set());
     } else {
       setSelectedIds(new Set(documents.map(d => d.id)));
     }
@@ -272,7 +288,10 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
                       <tr 
                         key={doc.id} 
                         className={`group transition-all duration-200 cursor-pointer hover:scale-[1.01] ${isActive ? 'bg-indigo-50/60 shadow-md ring-1 ring-indigo-200' : 'bg-white/40 hover:bg-white/60 shadow-sm hover:shadow-md'} ${isSelected ? 'bg-indigo-50/40' : ''} rounded-xl backdrop-blur-sm`}
-                        onClick={() => onSelectDocument(doc)}
+                        onClick={() => {
+                          onSelectDocument(doc);
+                          setPreviewDocument(doc);
+                        }}
                       >
                         <td className="px-4 py-4 rounded-l-xl" onClick={(e) => { e.stopPropagation(); toggleSelection(doc.id); }}>
                            <input 
@@ -304,7 +323,7 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
                           </div>
                         </td>
                         <td className="px-4 py-4 text-sm text-slate-600 capitalize font-medium">
-                          {doc.type}
+                          {getTypeLabel(doc.type)}
                         </td>
                         <td className="px-4 py-4 text-sm text-slate-600 font-medium">
                           {doc.counterparty || '—'}
@@ -361,7 +380,10 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
                   return (
                     <div 
                       key={doc.id}
-                      onClick={() => onSelectDocument(doc)}
+                      onClick={() => {
+                        onSelectDocument(doc);
+                        setPreviewDocument(doc);
+                      }}
                       className={`group relative flex flex-col overflow-hidden transition-all duration-300 cursor-pointer rounded-2xl ${isActive ? 'ring-2 ring-indigo-500 shadow-xl scale-[1.02] bg-white/80' : 'hover:scale-105 hover:shadow-xl bg-white/60 hover:bg-white/80'} ${GLASS_STYLES.card}`}
                     >
                       {/* Grid Item Header */}
@@ -434,12 +456,9 @@ export const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ onSelectDocume
       {/* Preview Modal */}
       {previewDocument && (
         <DocumentPreviewModal
+          document={previewDocument}
           isOpen={!!previewDocument}
           onClose={() => setPreviewDocument(null)}
-          documentId={previewDocument.id}
-          documentTitle={previewDocument.title}
-          documentType={previewDocument.type}
-          documentPath={previewDocument.path}
         />
       )}
     </div>

@@ -162,10 +162,14 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
+    # Исключаем файлы с моделью из автоперезагрузки чтобы не терять модель в памяти
+    reload_excludes = ["**/qwen_service.py", "**/models/**"] if settings.DEBUG else []
+    
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
         port=8000,
-        reload=settings.DEBUG
+        reload=settings.DEBUG,
+        reload_excludes=reload_excludes if reload_excludes else None
     )
 

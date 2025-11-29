@@ -59,35 +59,32 @@ class RAGService:
                 max_length=2048
             )
             
-            device = self._qwen_service._get_best_device()
+            device = next(model.parameters()).device
+            logger.info(f"🔄 Генерация эмбеддинга на устройстве: {device}")
             
-            # Для генерации эмбеддингов всегда используем CPU, чтобы избежать проблем с MPS
-            # MPS может иметь проблемы с некоторыми операциями (например, register_pytree_node)
-            # Поэтому для стабильности используем CPU для эмбеддингов
-            inputs_cpu = {k: v.to("cpu") for k, v in inputs.items()}
+            # Используем то же устройство что и модель (GPU или CPU)
+            inputs_device = {k: v.to(device) for k, v in inputs.items()}
             
-            # Получаем скрытые состояния модели на CPU
+            # Получаем скрытые состояния модели на том же устройстве
+            logger.info(f"🔄 Начинаю forward pass для эмбеддинга...")
             with torch.no_grad():
-                # Временно перемещаем модель на CPU для генерации эмбеддингов
-                original_device = next(model.parameters()).device
-                model_cpu = model.to("cpu")
+                outputs = model(**inputs_device, output_hidden_states=True)
+                logger.info(f"✅ Forward pass завершен")
                 
-                try:
-                    outputs = model_cpu(**inputs_cpu, output_hidden_states=True)
-                    
-                    # Извлекаем последний скрытый слой
-                    hidden_states = outputs.hidden_states[-1]
-                    
-                    # Mean pooling: усредняем по токенам (axis=1)
-                    # Учитываем attention_mask для корректного усреднения
-                    attention_mask = inputs_cpu["attention_mask"]
-                    mask_expanded = attention_mask.unsqueeze(-1).expand(hidden_states.size()).float()
-                    sum_embeddings = torch.sum(hidden_states * mask_expanded, dim=1)
-                    sum_mask = torch.clamp(mask_expanded.sum(dim=1), min=1e-9)
-                    embedding = (sum_embeddings / sum_mask).squeeze().numpy()
-                finally:
-                    # Возвращаем модель на исходное устройство
-                    model.to(original_device)
+                # Извлекаем последний скрытый слой
+                hidden_states = outputs.hidden_states[-1]
+                
+                # Mean pooling: усредняем по токенам (axis=1)
+                # Учитываем attention_mask для корректного усреднения
+                attention_mask = inputs_device["attention_mask"]
+                mask_expanded = attention_mask.unsqueeze(-1).expand(hidden_states.size()).float()
+                sum_embeddings = torch.sum(hidden_states * mask_expanded, dim=1)
+                sum_mask = torch.clamp(mask_expanded.sum(dim=1), min=1e-9)
+                embedding = (sum_embeddings / sum_mask).squeeze()
+                
+                # Перемещаем на CPU только для конвертации в numpy
+                embedding = embedding.cpu().numpy()
+                logger.info(f"✅ Эмбеддинг сгенерирован, размер: {embedding.shape}")
             
             # Нормализуем эмбеддинг (L2 нормализация)
             norm = np.linalg.norm(embedding)
@@ -119,7 +116,9 @@ class RAGService:
             Метрики документа для передачи в Qwen
         """
         # Генерируем эмбеддинги для текста
+        logger.info(f"🔄 Начинаю генерацию эмбеддинга для документа {filename}...")
         embedding = self.generate_embedding(text)
+        logger.info(f"✅ Эмбеддинг сгенерирован для документа {filename}")
         
         # Разбиваем на чанки для анализа
         from app.services.document_processor import DocumentProcessor
@@ -330,31 +329,45 @@ class RAGService:
             else:
                 logger.warning("⚠️ Не удалось сгенерировать эмбеддинги")
             
-            # Создаем чанки с эмбеддингами
+            # Создаем чанки с эмбеддингами используя прямой SQL для обхода проблем с мапперами
+            from sqlalchemy import text as sql_text
             saved_count = 0
             for i, (chunk_data, chunk_embedding) in enumerate(zip(chunks, chunk_embeddings)):
                 try:
                     # Проверяем размерность эмбеддинга
                     emb_list = chunk_embedding.tolist() if hasattr(chunk_embedding, 'tolist') else list(chunk_embedding)
+                    emb_str = '[' + ','.join(map(str, emb_list)) + ']'
                     
-                    chunk = DocumentChunk(
-                        id=uuid.uuid4(),
-                        document_id=uuid.UUID(document_id),
-                        chunk_id=i,
-                        text=chunk_data["text"],
-                        start_pos=chunk_data["start_pos"],
-                        end_pos=chunk_data["end_pos"],
-                        embedding=emb_list,
-                        chunk_metadata=json.dumps({
+                    chunk_id_new = str(uuid.uuid4())
+                    chunk_metadata_json = json.dumps({
                             "filename": metrics.get("filename"),
                             "classification": classification_result
                         })
-                    )
                     
-                    db.add(chunk)
+                    # Используем прямой SQL запрос с правильным синтаксисом для pgvector
+                    await db.execute(
+                        sql_text("""
+                            INSERT INTO document_chunks 
+                            (id, document_id, chunk_id, text, start_pos, end_pos, embedding, chunk_metadata)
+                            VALUES 
+                            (:id, :document_id, :chunk_id, :text, :start_pos, :end_pos, CAST(:embedding AS vector), :chunk_metadata)
+                        """),
+                        {
+                            "id": chunk_id_new,
+                            "document_id": document_id,
+                            "chunk_id": i,
+                            "text": chunk_data["text"],
+                            "start_pos": chunk_data["start_pos"],
+                            "end_pos": chunk_data["end_pos"],
+                            "embedding": emb_str,
+                            "chunk_metadata": chunk_metadata_json
+                        }
+                    )
                     saved_count += 1
                 except Exception as chunk_error:
                     logger.error(f"❌ Ошибка при создании чанка {i}: {chunk_error}")
+                    import traceback
+                    traceback.print_exc()
             
             await db.commit()
             logger.info(f"✅ RAG сохранил {saved_count}/{len(chunks)} чанков в Postgres для документа {document_id}")

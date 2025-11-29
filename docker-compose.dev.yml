@@ -44,8 +44,8 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9100:9000"
+      - "9101:9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -70,14 +70,24 @@ services:
       MINIO_BUCKET_NAME: sirius-documents
       MINIO_USE_SSL: "false"
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
-      QWEN_MODEL_PATH: ${QWEN_MODEL_PATH:-}
-      QWEN_DEVICE: ${QWEN_DEVICE:-auto}
+      QWEN_MODEL_PATH: /app/models
+      QWEN_DEVICE: cuda
+      QWEN_MAX_MEMORY_PERCENT: ${QWEN_MAX_MEMORY_PERCENT:-95}
+      TRANSFORMERS_CACHE: /tmp/transformers_cache  # Временный кэш
+      HF_HOME: /tmp/huggingface_cache  # Временный кэш HuggingFace
       CORS_ORIGINS: http://localhost:5173,http://localhost:3000,http://frontend:80
     ports:
       - "8000:8000"
     volumes:
       - ./backend/app:/app/app
       - ./backend/models:/app/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     depends_on:
       postgres:
         condition: service_healthy
@@ -98,7 +108,7 @@ services:
     ports:
       - "5173:5173"
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_URL=https://api-mpit.ru.tuna.am
     volumes:
       - .:/app
       - /app/node_modules

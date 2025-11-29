@@ -109,6 +109,25 @@ export const documentsService = {
   },
 
   /**
+   * Get document content for preview
+   */
+  async getDocumentContent(id: string): Promise<{ content: string; pages: number; type: string; title: string }> {
+    return apiClient.get<{ content: string; pages: number; type: string; title: string }>(
+      API_ENDPOINTS.DOCUMENTS.CONTENT(id)
+    );
+  },
+
+  /**
+   * Get PDF preview pages as images
+   */
+  async getDocumentPreviewPages(id: string, maxPages: number = 5): Promise<{ pages: Array<{ page: number; image: string; width: number; height: number }>; total_pages: number; rendered_pages: number }> {
+    return apiClient.get<{ pages: Array<{ page: number; image: string; width: number; height: number }>; total_pages: number; rendered_pages: number }>(
+      API_ENDPOINTS.DOCUMENTS.PREVIEW_PAGES(id),
+      { params: { max_pages: maxPages } }
+    );
+  },
+
+  /**
    * Search documents
    */
   async searchDocuments(query: string, params?: DocumentListParams): Promise<DocumentListResponse> {

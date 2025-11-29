@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     QWEN_DEVICE: str = "auto"
     QWEN_LOAD_IN_8BIT: bool = False
     QWEN_LOAD_IN_4BIT: bool = False
+    QWEN_MAX_MEMORY_PERCENT: float = float(os.environ.get("QWEN_MAX_MEMORY_PERCENT", "95"))  # Процент памяти GPU для модели (остальное для буфера)
     
     # RAG
     # Используется Qwen3-4B для генерации эмбеддингов (настроено через QWEN_MODEL_PATH)
