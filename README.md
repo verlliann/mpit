@@ -2,6 +2,8 @@
 
 ## Для скачивания моделей перейдите по ссылке: https://disk.360.yandex.ru/d/Aadjg4RB-YrjqA
 
+## Ссылка на демо-стенд: https://web-mpit.ru.tuna.am/
+
 **Система управления документами** с интеграцией FastAPI и AI ассистентом.
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
